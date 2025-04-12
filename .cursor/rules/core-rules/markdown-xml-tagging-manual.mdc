@@ -1,0 +1,94 @@
+---
+description:
+globs:
+alwaysApply: false
+---
+
+# Markdown XML Tagging Guidelines
+
+## Critical Rules
+
+- Always wrap major document sections in descriptive XML tags
+- Use consistent, semantic tag names that describe the content purpose
+- Tags should be hierarchical, moving from broad to specific
+- Include an XML declaration at the start of the document
+- Tag names should be kebab-case and descriptive
+- Never break existing markdown formatting when adding XML tags
+- Add XML comments before complex sections to explain their purpose
+- Include a table of contents section with links to major tagged sections
+
+## Standard Tag Structure
+
+- `<document-metadata>` - For title, date, author, status
+- `<table-of-contents>` - For navigation links
+- `<executive-summary>` - High level overview
+- `<section-{name}>` - Major document sections
+- `<subsection-{name}>` - Nested subsections
+- `<requirements>` - Requirements lists
+- `<dependencies>` - Dependencies or prerequisites
+- `<implementation>` - Implementation details
+- `<notes>` - Additional information
+- `<references>` - Links to related documents
+
+## Examples
+
+<example>
+<?xml version="1.0" encoding="UTF-8"?>
+<document>
+<document-metadata>
+# Architecture: User Authentication System
+Author: Jane Smith
+Date: 2024-03-20
+Status: Draft
+</document-metadata>
+
+<table-of-contents>
+- [Overview](#overview)
+- [Requirements](#requirements)
+- [Implementation](#implementation)
+</table-of-contents>
+
+<section-overview>
+## Overview
+This document outlines the architecture for our user authentication system.
+</section-overview>
+
+<section-requirements>
+## Requirements
+- Support OAuth 2.0
+- Implement MFA
+- Handle 100k concurrent users
+</section-requirements>
+
+<section-implementation>
+## Implementation
+<subsection-auth-flow>
+### Authentication Flow
+1. User initiates login
+2. System validates credentials
+3. MFA challenge issued
+</subsection-auth-flow>
+</section-implementation>
+</document>
+</example>
+
+<example type="invalid">
+# Architecture Document
+
+<wrong>
+This tag doesn't describe its purpose
+</wrong>
+
+<Section_Overview>
+Using PascalCase or snake_case instead of kebab-case
+</Section_Overview>
+
+<content>
+Too generic tag name
+</content>
+
+<requirements>
+- Missing parent section tag
+- No hierarchical structure
+</requirements>
+</example>
