@@ -326,39 +326,115 @@ In the future, that modes.json file will be replaced by the official file format
 <section-best-practices>
 ## Best Practices
 
-<subsection-rule-creation>
-### Rule Creation
+### Rule Creation and Management
 
-- Let AI handle rule creation and updates - but if you find stuff that is excessive or redundant, dont be afraid to prune the rules to help get them down to their core utility and essence
-- Be specific about desired behaviors
-- Provide examples of good/bad patterns
-- For new projects, allow organic rule emergence and try to have overall less rules, and rely more also on custom instructions for your custom agents.
-- If you start to have many very small rules applied to the same concept - for example you see your typescript rules subfolder has many files - you can ask the agent to consolidate and condense them down to a single file if they all generally apply and get picked up by the agent at the same time.
-</subsection-rule-creation>
+#### Initial Rule Development
+- Let the AI handle rule creation and updates through natural language requests
+- Be specific about desired behaviors and include context
+- Provide examples of both good and bad patterns
+- Start with minimal rules and let them evolve organically
+- Consider the scope and impact of each rule before creation
 
-<subsection-ai-behavior>
-### AI Behavior Control
+#### Rule Organization
+- Keep rules modular and focused on specific concerns
+- Use appropriate organizational folders (e.g., `ts-rules`, `core-rules`)
+- Follow consistent naming patterns: `rule-name-{type}.mdc`
+- Group related rules logically within their folders
+- Consider rule dependencies and interactions
 
-- Create rules when noticing inconsistent behavior
-- Use clear, descriptive language
-- Verify AI understanding by reviewing rules
-</subsection-ai-behavior>
+#### Rule Consolidation
+- Regularly review rules for overlap or redundancy
+- Consolidate rules when multiple small rules cover similar concepts
+- Example: Combine multiple TypeScript formatting rules into a single comprehensive standard
+- Keep consolidated rules well-organized with clear sections
+- Document the reasoning behind consolidation decisions
 
-<subsection-workflow>
-### Workflow Integration
+#### Rule Evolution
+- Allow rules to grow with your project's needs
+- Update rules based on team feedback and practical usage
+- Document significant rule changes in commit messages
+- Consider versioning for major rule changes
+- Test rule changes with different scenarios
 
-- Start with template rules
-- Let AI evolve rules as your project grows
-- Maintain consistency using AI for rule management
-</subsection-workflow>
+### Effective Rule Usage
 
-<subsection-rule-removal>
-### Rule Removal
+#### Rule Selection
+- Choose the most specific rule type for your needs
+- Use Always rules sparingly to avoid conflicts
+- Prefer Auto Select rules for file-specific conventions
+- Use Agent Selected rules for context-dependent decisions
+- Reserve Manual rules for specialized cases
 
-- Some rules become unnecessary as codebase grows as the AI will follow surrounding code styles and conventions
-- The minimal amount of rules, the better - so prune rules as the codebase changes or models improve
-- A rule you need today, may be a rule you do not need tomorrow, and then again you might need it another day - trial and error and evolution is the key to dealing with the nondeterministic nature of what we are working with here.
-</subsection-rule-removal>
+#### Rule Content
+- Write clear, actionable directives
+- Include specific examples for complex rules
+- Use comments to explain non-obvious decisions
+- Keep rules focused and concise
+- Include both valid and invalid examples
+
+#### Rule Optimization
+- Monitor rule effectiveness over time
+- Remove or update rules that cause friction
+- Combine rules that are frequently used together
+- Split rules that become too complex
+- Regular review and refinement of existing rules
+
+### Rule Maintenance
+
+#### When to Remove Rules
+- When the codebase naturally follows the pattern
+- If the rule creates more friction than value
+- When better alternatives emerge
+- If the rule conflicts with new project requirements
+- When the rule becomes obsolete due to tooling changes
+
+#### When to Update Rules
+- When project requirements change
+- To incorporate learned best practices
+- When new edge cases are discovered
+- To improve clarity or effectiveness
+- When technical dependencies evolve
+
+#### Rule Review Process
+1. Regularly assess rule effectiveness
+2. Gather feedback from team members
+3. Document rule impact and issues
+4. Make iterative improvements
+5. Communicate changes to the team
+
+### Common Pitfalls to Avoid
+
+#### Rule Creation
+- Creating overly broad or vague rules
+- Implementing conflicting rule requirements
+- Ignoring rule type best practices
+- Creating redundant rules
+- Over-relying on Always rules
+
+#### Rule Management
+- Neglecting rule maintenance
+- Keeping outdated or ineffective rules
+- Not documenting rule changes
+- Ignoring rule conflicts
+- Poor rule organization
+
+### Integration with Development Workflow
+
+#### Custom Agents and Rules
+- Align rules with custom agent capabilities
+- Use rules to enhance agent effectiveness
+- Consider rule impact on different agent types
+- Maintain consistency across agents
+- Document agent-specific rule requirements
+
+#### Project Evolution
+- Adapt rules as the project grows
+- Consider scalability in rule design
+- Plan for future rule requirements
+- Monitor rule performance at scale
+- Regular rule system audits
+
+Remember: The rule system is a living part of your development process. It should evolve and adapt with your project while maintaining clarity and effectiveness. Regular review and refinement ensure your rules continue to add value without creating unnecessary complexity. 🎯
 </section-best-practices>
 
 <section-file-exclusions>
