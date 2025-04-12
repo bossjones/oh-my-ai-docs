@@ -2,7 +2,8 @@
 [group('llmstxt')]
 llmstxt-dpytest:
     uv run llmstxt-architect \
-    --urls https://dpytest.readthedocs.io/en/latest/modules/index.html \
+    --urls https://dpytest.readthedocs.io/en/latest/index.html \
+    https://dpytest.readthedocs.io/en/latest/tutorials/index.html \
     https://dpytest.readthedocs.io/en/latest/modules/index.html \
     --max-depth 3 \
     --llm-name claude-3-7-sonnet-latest \
