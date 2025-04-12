@@ -11,7 +11,6 @@ alwaysApply: false
 - Always wrap major document sections in descriptive XML tags
 - Use consistent, semantic tag names that describe the content purpose
 - Tags should be hierarchical, moving from broad to specific
-- Include an XML declaration at the start of the document
 - Tag names should be kebab-case and descriptive
 - Never break existing markdown formatting when adding XML tags
 - Add XML comments before complex sections to explain their purpose
