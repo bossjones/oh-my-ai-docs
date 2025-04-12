@@ -19,6 +19,8 @@ import "justfiles/security.just"
 import "justfiles/convert.just"
 import "justfiles/taplo.just"
 import "justfiles/audit.just"
+import "justfiles/llmstxt.just"
+
 
 # display help information
 default:
