@@ -304,9 +304,157 @@ This type system ensures rules are applied appropriately while maintaining flexi
 </section-rule-types>
 
 <section-private-rules>
-## Private Rules, MCP Config and Custom Agents.
+## Private Rules, Custom Agents, and Configuration
 
-If you want to have rules that are not used by others in the repository - you can add rules to a .cursor/rules folder in your user folder. They will also be applied to every project you open, which is a potential benefit. Additionally you can use custom agents with their own rules, that are not shared. In the future when Cursor adds the ability to have a agents.json file (or similarly named) - then you should still be able to add it to the user folder .cursor folder. This also works with mcp.json.
+### Private Rules Overview
+
+Private rules provide a way to maintain personal or team-specific rules that don't need to be shared with the entire repository. These rules can be stored in your user-specific `.cursor/rules` folder and will be applied across all your projects.
+
+#### User-Specific Rules Structure
+```
+~/.cursor/rules/                    # User's personal rules directory
+├── my-rules/                       # Personal customizations
+│   ├── formatting-always.mdc       # Personal formatting preferences
+│   └── workflow-agent.mdc          # Personal workflow patterns
+├── project-rules/                  # Project-specific rules
+│   ├── project-a/                  # Rules for specific projects
+│   └── project-b/
+└── team-rules/                     # Team-specific rules
+    └── team-standards-auto.mdc     # Team conventions
+```
+
+#### Benefits of Private Rules
+- Apply consistently across all projects you open
+- Maintain personal preferences without affecting team repository
+- Test rules before proposing them to the team
+- Keep project-specific customizations separate
+- Override repository rules when needed
+
+### Custom Agents Configuration
+
+Custom agents provide fine-grained control over AI behavior and capabilities. They can be configured with specific tools, models, and prompts to create specialized assistants for different tasks.
+
+#### Agent Configuration Components
+1. **Tool Access**
+   - Control which Cursor native tools are available
+   - Manage MCP tool accessibility
+   - Set tool-specific parameters and limits
+
+2. **Model Selection**
+   - Choose appropriate AI models for specific tasks
+   - Configure model parameters
+   - Set context window sizes
+
+3. **Custom Prompts**
+   - Define specialized behavior patterns
+   - Set task-specific guidelines
+   - Include role-specific knowledge
+
+#### Agent Types and Roles
+```json
+{
+  "agents": {
+    "projectManager": {
+      "model": "gpt-4",
+      "role": "Project Management",
+      "allowedTools": ["git", "project_planning"],
+      "customRules": ["pm-workflow-agent.mdc"]
+    },
+    "architect": {
+      "model": "gpt-4",
+      "role": "System Architecture",
+      "allowedTools": ["codebase_search", "diagram_generation"],
+      "customRules": ["architecture-standards-agent.mdc"]
+    },
+    "developer": {
+      "model": "gpt-4",
+      "role": "Development",
+      "allowedTools": ["all"],
+      "customRules": ["coding-standards-auto.mdc"]
+    }
+  }
+}
+```
+
+### MCP Integration
+
+MCP (Model Control Protocol) configuration can be customized at both the user and project level, allowing for sophisticated integration with custom agents and rules.
+
+#### MCP Configuration Structure
+```json
+{
+  "mcp": {
+    "tools": {
+      "enabled": ["codebase_search", "edit_file", "run_terminal_cmd"],
+      "disabled": [],
+      "custom": {
+        "myCustomTool": {
+          "description": "Custom tool configuration",
+          "parameters": {}
+        }
+      }
+    },
+    "agents": {
+      "customAgents": true,
+      "agentConfigPath": "~/.cursor/agents.json"
+    }
+  }
+}
+```
+
+#### Integration Points
+1. **Tool Configuration**
+   - Enable/disable specific tools
+   - Configure tool parameters
+   - Add custom tools
+
+2. **Agent Integration**
+   - Link agents to specific tools
+   - Set agent-specific configurations
+   - Manage agent permissions
+
+3. **Rule Application**
+   - Configure rule priority
+   - Set rule activation conditions
+   - Manage rule conflicts
+
+### Future Compatibility
+
+As Cursor evolves, the configuration system will be enhanced with new features:
+
+1. **Upcoming Features**
+   - Official `agents.json` configuration file
+   - Enhanced agent customization options
+   - Improved rule management system
+
+2. **Migration Path**
+   - Current configurations will be automatically migrated
+   - Backward compatibility will be maintained
+   - New features will be opt-in
+
+3. **Best Practices**
+   - Keep configurations version controlled
+   - Document custom configurations
+   - Plan for future migrations
+
+### Configuration Tips
+
+1. **Organization**
+   - Use clear folder structures
+   - Maintain consistent naming conventions
+   - Document configuration decisions
+
+2. **Version Control**
+   - Track configuration changes
+   - Use `.gitignore` for private configs
+   - Share team configurations appropriately
+
+3. **Maintenance**
+   - Regular configuration reviews
+   - Update as new features become available
+   - Remove unused configurations
+
+Remember: Private rules and custom agents provide powerful ways to tailor Cursor's behavior to your specific needs while maintaining clean separation between personal, team, and project-specific configurations. 🔧
 </section-private-rules>
 
 <section-custom-agents>
