@@ -266,12 +266,12 @@ def audit_cursor_rules(directory: str) -> tuple[dict[str, list[str]], dict[str, 
     expected_folders: list[str] = [
         "core-rules",  # Rules related to cursor agent behavior or rule generation
         "global-rules",  # Rules that are always applied to every chat and context
-        "testing-rules",  # Rules about testing
+        # "testing-rules",  # Rules about testing
         "tool-rules",  # Rules specific to different tools
         "ts-rules",  # TypeScript language specific rules
         "py-rules",  # Python specific rules
         "ui-rules",  # Rules about html, css, react
-        "my-rules"  # Personal rules (gitignored in shared repos)
+        # "my-rules"  # Personal rules (gitignored in shared repos)
     ]
 
     if not os.path.exists(directory):
