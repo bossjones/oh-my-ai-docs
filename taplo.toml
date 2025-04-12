@@ -1,0 +1,112 @@
+## https://taplo.tamasfe.dev/configuration/file.html
+#:schema = "taplo://taplo.toml"
+# Include all TOML files for formatting
+include = ["**/*.toml"]
+
+# Configure schema validation for pyproject.toml
+# [schema]
+# path = "https://json.schemastore.org/pyproject.json"
+# enabled = true
+
+# Formatter options reference table
+# |        option         |                                                          description                                                           | default value  |
+# | :-------------------: | :----------------------------------------------------------------------------------------------------------------------------: | :------------: |
+# |     align_entries     |       Align entries vertically. Entries that have table headers, comments, or blank lines between them are not aligned.        |     false      |
+# |    align_comments     | Align consecutive comments after entries and items vertically. This applies to comments that are after entries or array items. |      true      |
+# | array_trailing_comma  |                                           Put trailing commas for multiline arrays.                                            |      true      |
+# |   array_auto_expand   |                   Automatically expand arrays to multiple lines when they exceed `column_width` characters.                    |      true      |
+# |  array_auto_collapse  |                                     Automatically collapse arrays if they fit in one line.                                     |      true      |
+# |    compact_arrays     |                                       Omit whitespace padding inside single-line arrays.                                       |      true      |
+# | compact_inline_tables |                                         Omit whitespace padding inside inline tables.                                          |     false      |
+# |  inline_table_expand  |                                       Expand values (e.g. arrays) inside inline tables.                                        |      true      |
+# |    compact_entries    |                                                  Omit whitespace around `=`.                                                   |     false      |
+# |     column_width      |                          Target maximum column width after which arrays are expanded into new lines.                           |       80       |
+# |     indent_tables     |                                            Indent subtables if they come in order.                                             |     false      |
+# |    indent_entries     |                                                  Indent entries under tables.                                                  |     false      |
+# |     indent_string     |                        Indentation to use, should be tabs or spaces but technically could be anything.                         | 2 spaces (" ") |
+# |   trailing_newline    |                                              Add trailing newline to the source.                                               |      true      |
+# |     reorder_keys      |                               Alphabetically reorder keys that are not separated by blank lines.                               |     false      |
+# |    reorder_arrays     |                           Alphabetically reorder array values that are not separated by blank lines.                           |     false      |
+# |  allowed_blank_lines  |                                     The maximum amount of consecutive blank lines allowed.                                     |       2        |
+# |         crlf          |                                                     Use CRLF line endings.                                                     |     false      |
+
+# SOURCE: https://github.com/tamasfe/taplo/blob/4890bd426ce432a97596944ca6496979ff757355/site/site/configuration/formatter-options.md
+
+# Default formatting rules for all TOML files (using official defaults)
+[[rule]]
+  # Apply these rules to all TOML files
+  include = ["**/*.toml"]
+
+  [rule.formatting]
+    # Vertically align entries (default: false)
+    align_entries = true
+    # Vertically align consecutive comments after entries and array items (default: true)
+    align_comments = true
+
+    # Array formatting settings
+    # Automatically collapse arrays if they fit on one line (default: true)
+    array_auto_collapse = true
+    # Expand arrays to multiple lines when they exceed column_width (default: true)
+    array_auto_expand = true
+    # Add trailing commas to multiline arrays (default: true)
+    array_trailing_comma = true
+    # Remove whitespace padding inside single-line arrays (default: true)
+    compact_arrays = true
+
+    # Table formatting settings
+    # Remove whitespace padding inside inline tables (default: false)
+    compact_inline_tables = false
+    # Expand values inside inline tables (default: true)
+    inline_table_expand = true
+    # Don't indent subtables even if they come in order (default: false)
+    indent_tables = true
+    # Don't indent entries under tables (default: false)
+    indent_entries = true
+    # Use 2 spaces for indentation (default)
+    indent_string = "  "
+
+    # General formatting settings
+    # Don't omit whitespace around = (default: false)
+    compact_entries = false
+    # Maximum line length before wrapping (default: 80)
+    column_width = 80
+    # Ensure files end with a newline (default: true)
+    trailing_newline = true
+    # Maximum number of consecutive blank lines allowed (default: 2)
+    allowed_blank_lines = 2
+    # Use LF line endings (Unix style) instead of CRLF (default: false)
+    crlf = false
+    # Don't reorder keys (default: false)
+    reorder_keys = true
+    # Don't reorder arrays (default: false)
+    reorder_arrays = true
+
+# Specific rules for pyproject.toml - keeping Python conventions
+[[rule]]
+  include = ["pyproject.toml"]
+
+  [rule.formatting]
+    # Use Python standard 4-space indentation
+    indent_string  = "    "
+    reorder_arrays = true
+    reorder_keys   = true
+
+    # Other settings inherit from default rule
+
+# Special formatting rules for specific sections in pyproject.toml
+[[rule]]
+  # Apply these rules only to specific keys in pyproject.toml
+  include = ["pyproject.toml"]
+
+
+  [rule.formatting]
+    # Use Python standard 4-space indentation
+    indent_string = "    "
+    # Other settings inherit from default rule
+
+[[rule]]
+  exclude = ["pyproject.toml"]
+  keys    = ["project"]
+
+  [rule.formatting]
+    reorder_keys = false
