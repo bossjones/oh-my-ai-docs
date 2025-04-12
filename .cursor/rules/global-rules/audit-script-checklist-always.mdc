@@ -1,0 +1,23 @@
+---
+description:
+globs:
+alwaysApply: true
+---
+
+# Audit Script Update Checklist
+
+## Critical Rules
+
+- Always run `cat SCRATCH.md` before making any changes to `scripts/audit_cursor_rules_headers_gemini.py`
+- Mark tasks as completed in the SCRATCH.md file by changing `[ ]` to `[x]` as we complete them
+- After updating any code in `scripts/audit_cursor_rules_headers_gemini.py`, run `cat SCRATCH.md` again to see progress
+- When multiple related checklist items are completed at once, mark all of them as complete
+- Always explain what was changed and why in each commit
+- Run the updated script after changes to verify functionality
+- Keep track of overall progress through the checklist
+
+## Examples
+
+<example>
+User: "Update the determine_rule_type function to check for proper file suffixes"
+</example>

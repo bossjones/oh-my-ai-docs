@@ -14,7 +14,7 @@ This script checks for:
 import argparse
 import os
 import re
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Literal, Optional, Tuple, Union
 
 from rich import box
 from rich.console import Console
@@ -22,26 +22,60 @@ from rich.panel import Panel
 from rich.table import Table
 from rich.text import Text
 
+# Define rule type literals for strong typing
+RuleType = Literal["Always", "Agent Selected", "Auto Select", "Auto Select+desc", "Manual", "Unknown"]
 
-def determine_rule_type(description: str, globs: str, always_apply: bool) -> tuple[str, list[str]]:
+def determine_rule_type(description: str, globs: str, always_apply: bool, file_name: str = "") -> tuple[RuleType, list[str]]:
     """
-    Determine the type of cursor rule based on frontmatter fields.
+    Determine the type of cursor rule based on frontmatter fields and file name.
 
     Args:
         description: Content of the description field
         globs: Content of the globs field
         always_apply: Value of the alwaysApply field
+        file_name: Name of the rule file (optional)
 
     Returns:
         Tuple containing:
         - String indicating the rule type
         - List of issues if the combination is invalid
     """
-    issues = []
+    issues: list[str] = []
+    rule_type: RuleType = "Unknown"
+    expected_suffix = ""
 
+    # First check if the file suffix indicates a specific rule type
+    if file_name:
+        if file_name.endswith("-always.mdc"):
+            file_based_type = "Always"
+            if not always_apply:
+                issues.append("File name indicates Always rule (-always.mdc) but alwaysApply is not true")
+        elif file_name.endswith("-agent.mdc"):
+            file_based_type = "Agent Selected"
+            if not description.strip() or globs.strip():
+                issues.append("File name indicates Agent Selected rule (-agent.mdc) but frontmatter doesn't match")
+        elif file_name.endswith("-auto.mdc"):
+            if description.strip() and globs.strip():
+                file_based_type = "Auto Select+desc"
+            elif not description.strip() and globs.strip():
+                file_based_type = "Auto Select"
+            else:
+                file_based_type = "Auto Select"
+                issues.append("File name indicates Auto Select rule (-auto.mdc) but globs field is empty")
+        elif file_name.endswith("-manual.mdc"):
+            file_based_type = "Manual"
+            if description.strip() or globs.strip() or always_apply:
+                issues.append("File name indicates Manual rule (-manual.mdc) but frontmatter doesn't match")
+        else:
+            file_based_type = None
+    else:
+        file_based_type = None
+
+    # Check frontmatter values
     # Check for Always rule
     if always_apply:
         rule_type = "Always"
+        expected_suffix = "-always.mdc"
         if description.strip():
             issues.append("Always rules should have empty description field")
         if globs.strip():
@@ -50,22 +84,34 @@ def determine_rule_type(description: str, globs: str, always_apply: bool) -> tup
     # Check for Agent Selected rule
     elif description.strip() and not globs.strip():
         rule_type = "Agent Selected"
+        expected_suffix = "-agent.mdc"
 
     # Check for Auto Select rule
     elif not description.strip() and globs.strip():
         rule_type = "Auto Select"
+        expected_suffix = "-auto.mdc"
 
     # Check for Auto Select+desc rule
     elif description.strip() and globs.strip():
         rule_type = "Auto Select+desc"
+        expected_suffix = "-auto.mdc"
 
     # Check for Manual rule
     elif not description.strip() and not globs.strip() and not always_apply:
         rule_type = "Manual"
+        expected_suffix = "-manual.mdc"
 
     else:
         rule_type = "Unknown"
         issues.append("Invalid combination of frontmatter fields")
+
+    # If we have both file-based and frontmatter-based rule types, check for consistency
+    if file_based_type and rule_type != file_based_type and rule_type != "Unknown":
+        issues.append(f"File suffix (-{file_based_type.lower().replace(' ', '-')}.mdc) doesn't match the rule type determined from frontmatter ({rule_type})")
+
+    # Validate file name suffix if file name was provided
+    if file_name and expected_suffix and not file_name.endswith(expected_suffix):
+        issues.append(f"File name should end with '{expected_suffix}' for {rule_type} rule type")
 
     return rule_type, issues
 
@@ -80,7 +126,7 @@ def check_for_quoted_globs(globs: str) -> list[str]:
     Returns:
         List of issues found (empty if no quotes detected)
     """
-    issues = []
+    issues: list[str] = []
 
     # Check for entire field being quoted
     if globs.strip().startswith('"') and globs.strip().endswith('"'):
@@ -108,8 +154,8 @@ def check_yaml_header(file_path: str) -> tuple[bool, list[str], dict[str, Any]]:
         - List of issues found (empty if valid)
         - Dictionary of extracted frontmatter fields
     """
-    issues = []
-    frontmatter = {
+    issues: list[str] = []
+    frontmatter: dict[str, str | bool | RuleType] = {
         "description": "",
         "globs": "",
         "alwaysApply": False,
@@ -117,6 +163,9 @@ def check_yaml_header(file_path: str) -> tuple[bool, list[str], dict[str, Any]]:
     }
 
     try:
+        # Extract file name for validation
+        file_name = os.path.basename(file_path)
+
         with open(file_path, encoding="utf-8") as f:
             content = f.read()
 
@@ -174,18 +223,19 @@ def check_yaml_header(file_path: str) -> tuple[bool, list[str], dict[str, Any]]:
                 frontmatter["alwaysApply"] = always_apply_value == "true"
 
                 # Fix for incorrectly capturing "alwaysApply: false" as a glob pattern
-                if "alwaysApply:" in frontmatter["globs"]:
+                if isinstance(frontmatter["globs"], str) and "alwaysApply:" in frontmatter["globs"]:
                     frontmatter["globs"] = ""
 
         # Check for empty lines in frontmatter
         if "\n\n" in yaml_content:
             issues.append("Empty lines between frontmatter fields")
 
-        # Determine rule type and check for valid combinations
+        # Determine rule type and check for valid combinations, including file name check
         rule_type, type_issues = determine_rule_type(
-            frontmatter["description"],
-            frontmatter["globs"],
-            frontmatter["alwaysApply"]
+            str(frontmatter["description"]),
+            str(frontmatter["globs"]),
+            bool(frontmatter["alwaysApply"]),
+            file_name
         )
         frontmatter["rule_type"] = rule_type
         issues.extend(type_issues)
@@ -209,11 +259,30 @@ def audit_cursor_rules(directory: str) -> tuple[dict[str, list[str]], dict[str, 
         - Dictionary mapping file paths to lists of issues
         - Dictionary mapping file paths to frontmatter info
     """
-    results = {}
-    frontmatter_info = {}
+    results: dict[str, list[str]] = {}
+    frontmatter_info: dict[str, dict[str, Any]] = {}
+
+    # Expected organizational folders
+    expected_folders: list[str] = [
+        "core-rules",  # Rules related to cursor agent behavior or rule generation
+        "global-rules",  # Rules that are always applied to every chat and context
+        "testing-rules",  # Rules about testing
+        "tool-rules",  # Rules specific to different tools
+        "ts-rules",  # TypeScript language specific rules
+        "py-rules",  # Python specific rules
+        "ui-rules",  # Rules about html, css, react
+        "my-rules"  # Personal rules (gitignored in shared repos)
+    ]
 
     if not os.path.exists(directory):
         return {directory: [f"Directory not found: {directory}"]}, {}
+
+    # Check for organizational folders
+    existing_folders: list[str] = [f for f in os.listdir(directory) if os.path.isdir(os.path.join(directory, f))]
+    missing_folders: list[str] = [f for f in expected_folders if f not in existing_folders]
+
+    if missing_folders:
+        results[directory] = [f"Missing recommended organizational folder: {folder}" for folder in missing_folders]
 
     for root, _, files in os.walk(directory):
         for file in files:
@@ -221,8 +290,22 @@ def audit_cursor_rules(directory: str) -> tuple[dict[str, list[str]], dict[str, 
                 file_path = os.path.join(root, file)
                 is_valid, issues, frontmatter = check_yaml_header(file_path)
 
+                # Check if the file is in an organizational folder
+                relative_path = os.path.relpath(file_path, directory)
+                parts = relative_path.split(os.sep)
+
+                # If the file is not in the root directory of rules
+                if len(parts) > 1:
+                    org_folder = parts[0]
+                    if org_folder not in expected_folders:
+                        if "issues" not in issues:
+                            issues.append(f"File is in unexpected organizational folder: {org_folder}")
+                else:
+                    # File is in the root of rules directory
+                    issues.append("Rule file should be in an organizational subfolder, not in the root")
+
                 frontmatter_info[file_path] = frontmatter
-                if not is_valid:
+                if not is_valid or issues:
                     results[file_path] = issues
 
     return results, frontmatter_info
@@ -270,29 +353,37 @@ def print_rule_type_examples(console: Console) -> None:
     for rule_type, color, description in rule_types:
         example_text = ""
         field_notes = ""
+        file_name_example = ""
 
         if rule_type == "Agent Selected":
             example_text = "---\ndescription: Description of the cursor rule\nglobs:\nalwaysApply: false\n---"
             field_notes = "description: [bold green]CRITICAL[/bold green] - Agent uses this to decide when to apply\nglobs: [bold red]BLANK[/bold red]\nalwaysApply: must be false"
+            file_name_example = "core-rules/rule-name-agent.mdc"
         elif rule_type == "Always":
             example_text = "---\ndescription:\nglobs:\nalwaysApply: true\n---"
             field_notes = "description: [bold red]BLANK[/bold red]\nglobs: [bold red]BLANK[/bold red]\nalwaysApply: must be true"
+            file_name_example = "global-rules/rule-name-always.mdc"
         elif rule_type == "Auto Select":
             example_text = "---\ndescription:\nglobs: *.py, *.js\nalwaysApply: false\n---"
             field_notes = "description: [bold red]BLANK[/bold red]\nglobs: [bold green]CRITICAL[/bold green] - Must be valid glob pattern(s)\nalwaysApply: must be false"
+            file_name_example = "py-rules/rule-name-auto.mdc"
         elif rule_type == "Auto Select+desc":
             example_text = "---\ndescription: Description of the cursor rule\nglobs: *.py, *.js\nalwaysApply: false\n---"
             field_notes = "description: Included to help users understand the rule\nglobs: [bold green]CRITICAL[/bold green] - Must be valid glob pattern(s)\nalwaysApply: must be false"
+            file_name_example = "ts-rules/rule-name-auto.mdc"
         elif rule_type == "Manual":
             example_text = "---\ndescription:\nglobs:\nalwaysApply: false\n---"
             field_notes = "description: [bold red]BLANK[/bold red]\nglobs: [bold red]BLANK[/bold red]\nalwaysApply: must be false"
+            file_name_example = "tool-rules/rule-name-manual.mdc"
 
         panel_content = Text()
         panel_content.append(f"{description}\n\n", style="italic")
         panel_content.append("YAML Header Example:\n", style="bold")
         panel_content.append(f"{example_text}\n\n")
         panel_content.append("Field Requirements:\n", style="bold")
-        panel_content.append(field_notes)
+        panel_content.append(f"{field_notes}\n\n")
+        panel_content.append("File Name Pattern:\n", style="bold")
+        panel_content.append(f"{file_name_example}")
 
         panel = Panel(
             panel_content,
@@ -307,6 +398,25 @@ def print_rule_type_examples(console: Console) -> None:
     console.print(" • Glob patterns should be comma-separated with spaces: '*.py, *.js'")
     console.print(" • Do not use quotes around patterns: '*.py' is incorrect")
     console.print(" • Do not use array notation: [*.py, *.js] is incorrect")
+
+    # Add note about organizational folders
+    console.print("\n[bold blue]Organizational Folder Structure:[/bold blue]")
+    console.print(" • core-rules - rules related to cursor agent behavior or rule generation")
+    console.print(" • global-rules - rules that are always applied to every chat and context")
+    console.print(" • testing-rules - rules about testing")
+    console.print(" • tool-rules - rules specific to different tools")
+    console.print(" • ts-rules - typescript language specific rules")
+    console.print(" • py-rules - python specific rules")
+    console.print(" • ui-rules - rules about html, css, react")
+    console.print(" • my-rules - personal rules (gitignored in shared repos)")
+    console.print(" • (Other folders can be created for specific purposes as needed)")
+
+    # Add note about file naming conventions
+    console.print("\n[bold green]File Naming Conventions:[/bold green]")
+    console.print(" • Always format: rule-name-always.mdc")
+    console.print(" • Agent Selected format: rule-name-agent.mdc")
+    console.print(" • Auto Select format: rule-name-auto.mdc")
+    console.print(" • Manual format: rule-name-manual.mdc")
 
 
 def parse_arguments() -> argparse.Namespace:
