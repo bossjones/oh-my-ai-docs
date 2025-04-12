@@ -109,24 +109,101 @@ This workflow ensures consistent rule creation and proper configuration based on
 <section-examples>
 ## Example Rule Generation Prompts
 
-No need to explicitly say "create a rule" - just describe the desired behavior:
+The beauty of Cursor's rule generation system is that you don't need to explicitly request rule creation - simply describe the desired behavior or requirement. The AI will determine the appropriate rule type and structure based on your description.
 
-- "Create a typescript file commenting standard that balances thoroughness with brevity"
-- "Please create an agent rule so that whenever I request deep research specifically on a topic you will first always inject the system date time into the context and use the Tavily search MCP tool to improve the results."
-- "Never create JS files again, you will only create TS or JSON files!" or "I asked you to set up Jest for our project and you created a JestConfig.js file, yet this is a TypeScript only project. Never again create any JS files. Always use TypeScript or JSON if necessary." - the second version of this request will ensure that the rule examples includes this specific call out, helping the agent learn better from actual mistakes made.
-- "Ensure proper error handling in all TypeScript files"
-- "Talk like a pirate in communications but not in code or documentation"
-- "Update testing standards to require 80% coverage"
-- "Enforce consistent naming conventions in my code"
-- "Standardize documentation formats"
-- "Keep imports organized in groups alphabetically in TypeScript files"
+### Always Rule Examples
+These become global rules that apply to every interaction:
 
-The AI automatically:
+```markdown
+"Ensure all communication maintains a professional tone while incorporating appropriate emojis"
+-> Creates: .cursor/rules/global-rules/communication-style-always.mdc
 
-1. Creates/updates the rule file
-2. Places it in the correct location
-3. Follows formatting standards
-4. Maintains version control
+"Format all error messages with a consistent structure: [ErrorType] Message (ErrorCode)"
+-> Creates: .cursor/rules/global-rules/error-format-always.mdc
+```
+
+### Agent Selected Rule Examples
+For context-dependent behaviors that the AI should intelligently apply:
+
+```markdown
+"When working with database operations, always include transaction management and proper error handling"
+-> Creates: .cursor/rules/core-rules/database-safety-agent.mdc
+
+"For security-related code changes, enforce OWASP best practices and require explicit security review comments"
+-> Creates: .cursor/rules/core-rules/security-standards-agent.mdc
+```
+
+### Auto Select Rule Examples
+For file pattern-specific rules, optionally with AI guidance:
+
+```markdown
+"TypeScript files should use explicit return types and parameter types"
+-> Creates: .cursor/rules/ts-rules/typescript-types-auto.mdc
+(Uses globs: *.ts, *.tsx)
+
+"React components must include proper prop types and documentation"
+-> Creates: .cursor/rules/ts-rules/react-component-standards-auto.mdc
+(Uses globs: src/components/**/*.tsx, src/components/**/*.ts)
+```
+
+### Combined Description and Globs Examples
+Demonstrating how rules can use both pattern matching and AI selection:
+
+```markdown
+"Ensure Jest test files follow the AAA pattern (Arrange-Act-Assert) and include comprehensive error cases"
+-> Creates: .cursor/rules/testing-rules/jest-standards-auto.mdc
+(Uses both description for guidance and globs: **/*.test.ts, **/*.spec.ts)
+
+"GraphQL resolvers must implement proper error handling and include performance considerations"
+-> Creates: .cursor/rules/ts-rules/graphql-resolver-standards-auto.mdc
+(Uses both description and globs: src/resolvers/**/*.ts)
+```
+
+### Manual Rule Examples
+For specialized rules that should only be explicitly invoked:
+
+```markdown
+"Create a rule for temporary debugging patterns that I can reference when needed"
+-> Creates: .cursor/rules/tool-rules/debug-patterns-manual.mdc
+
+"I need a reference guide for complex regex patterns that I can call upon"
+-> Creates: .cursor/rules/tool-rules/regex-patterns-manual.mdc
+```
+
+### Learning from Mistakes
+Including specific examples where rules were created to prevent previous issues:
+
+```markdown
+"I asked you to set up Jest for our project and you created a JestConfig.js file, yet this is a TypeScript only project. Never again create any JS files. Always use TypeScript or JSON if necessary."
+-> Creates: .cursor/rules/ts-rules/typescript-only-agent.mdc
+(Includes the specific mistake in examples)
+
+"The API endpoints you generated didn't include proper validation. Always include comprehensive input validation for all API endpoints."
+-> Creates: .cursor/rules/ts-rules/api-validation-agent.mdc
+(Documents the validation oversight in examples)
+```
+
+### Rule Evolution Examples
+Showing how rules can be updated or consolidated:
+
+```markdown
+"Combine all the TypeScript formatting rules into a single comprehensive standard"
+-> Updates/Consolidates multiple rules into: .cursor/rules/ts-rules/typescript-standards-auto.mdc
+
+"Update the testing coverage requirement to 90% and add specific rules for integration tests"
+-> Updates existing rule with new requirements
+```
+
+The AI automatically handles all aspects of rule creation:
+
+1. Analyzes the request to determine the appropriate rule type
+2. Creates or updates the rule file with proper frontmatter
+3. Places it in the correct organizational folder
+4. Includes relevant examples and invalid cases
+5. Maintains proper formatting and structure
+6. Generates appropriate success response
+
+Remember: The more specific and contextual your request, the better the AI can create appropriate rules that match your needs. Including examples of what you want to prevent (based on past mistakes) helps create more effective rules. 🎯
 </section-examples>
 
 <section-rule-types>
