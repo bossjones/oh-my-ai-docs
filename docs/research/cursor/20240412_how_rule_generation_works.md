@@ -1,4 +1,3 @@
-
 <document>
 <document-metadata>
 ## How Rule Generation Works
@@ -133,13 +132,98 @@ The AI automatically:
 <section-rule-types>
 ## Rule Types
 
-| Rule Type        | Usage                                            | description Field | globs Field           | alwaysApply field |
-| ---------------- | ------------------------------------------------ | ----------------- | --------------------- | ----------------- |
-| Agent Selected   | Agent sees description and chooses when to apply | critical          | blank                 | false             |
-| Always           | Applied to every chat and cmd-k request          | blank             | blank                 | true              |
-| Auto Select      | Applied to matching existing files               | blank             | critical glob pattern | false             |
-| Auto Select+desc | Better for new files                             | included          | critical glob pattern | false             |
-| Manual           | User must reference in chat                      | blank             | blank                 | false             |
+The rule system in Cursor is built around four primary rule types, each with specific activation conditions and use cases. Understanding how the frontmatter fields (`description`, `globs`, and `alwaysApply`) interact is crucial for effective rule creation.
+
+### Rule Type Overview
+
+| Rule Type | File Suffix | description | globs | alwaysApply | Primary Usage |
+|-----------|-------------|-------------|-------|-------------|---------------|
+| Always | -always.mdc | Optional | Ignored | true | Global rules that apply to every interaction |
+| Agent Selected | -agent.mdc | Required | Blank | false | AI decides when to apply based on context |
+| Auto Select | -auto.mdc | Optional | Required | false | Automatically triggered by file patterns |
+| Manual | -manual.mdc | Blank | Blank | false | Only applied when explicitly referenced |
+
+### Detailed Behavior
+
+1. **Always Rules** (-always.mdc)
+   - Applied to every chat and command interaction
+   - `alwaysApply: true` overrides all other fields
+   - Description can be included for documentation
+   - Glob patterns are ignored even if specified
+   - Best for: Global conventions, communication styles, consistent behaviors
+
+2. **Agent Selected Rules** (-agent.mdc)
+   - AI determines when to apply based on description
+   - Requires comprehensive description field
+   - No glob patterns (must be blank)
+   - Best for: Context-dependent rules, complex decision patterns
+
+3. **Auto Select Rules** (-auto.mdc)
+   - Automatically activated by matching file patterns
+   - Requires valid glob patterns
+   - Description is optional but recommended
+   - Can combine with description for hybrid behavior
+   - Best for: Language-specific rules, file type conventions
+
+4. **Manual Rules** (-manual.mdc)
+   - Only activated by explicit reference (e.g., @rule-name)
+   - Both description and globs must be blank
+   - Best for: Specialized or temporary rules
+
+### Field Interactions and Special Cases
+
+1. **Description + Globs Combination**
+   - Valid in Auto Select rules
+   - Enables both pattern-based activation and AI selection
+   - Example: TypeScript standards that apply to .ts files but can also be referenced for planning
+
+2. **Priority Order**
+   - Always rules take precedence (if alwaysApply: true)
+   - Auto Select rules activate next (if file matches)
+   - Agent Selected rules considered based on context
+   - Manual rules only on explicit reference
+
+### Examples
+
+<example>
+# Always Rule Example (-always.mdc)
+---
+description: "Optional documentation about the rule's purpose"
+globs:
+alwaysApply: true
+---
+# Communication Style Guide
+</example>
+
+<example>
+# Auto Select Rule with Description (-auto.mdc)
+---
+description: "Guidelines for TypeScript component structure"
+globs: src/components/**/*.tsx, src/components/**/*.ts
+alwaysApply: false
+---
+# TypeScript Component Standards
+</example>
+
+<example type="invalid">
+# Invalid Configuration
+---
+description: "Cannot have description in manual rule"
+globs: "*.ts" # Quotes not allowed in globs
+alwaysApply: true # Conflicts with manual rule type
+---
+# Invalid Rule Structure
+</example>
+
+### Best Practices for Rule Type Selection
+
+1. Choose the most specific rule type for your needs
+2. Use Always rules sparingly to avoid conflicts
+3. Prefer Auto Select for file-specific conventions
+4. Use Agent Selected for context-dependent decisions
+5. Reserve Manual rules for specialized cases
+
+This type system ensures rules are applied appropriately while maintaining flexibility for different use cases.
 </section-rule-types>
 
 <section-private-rules>
