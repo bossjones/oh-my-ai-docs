@@ -247,6 +247,7 @@ The rule system in Cursor is built around four primary rule types, each with spe
    - Both description and globs must be blank
    - Best for: Specialized or temporary rules
 
+<subsection-field-interactions>
 ### Field Interactions and Special Cases
 
 1. **Description + Globs Combination**
@@ -259,7 +260,9 @@ The rule system in Cursor is built around four primary rule types, each with spe
    - Auto Select rules activate next (if file matches)
    - Agent Selected rules considered based on context
    - Manual rules only on explicit reference
+</subsection-field-interactions>
 
+<subsection-examples>
 ### Examples
 
 <example>
@@ -291,7 +294,9 @@ alwaysApply: true # Conflicts with manual rule type
 ---
 # Invalid Rule Structure
 </example>
+</subsection-examples>
 
+<subsection-best-practices>
 ### Best Practices for Rule Type Selection
 
 1. Choose the most specific rule type for your needs
@@ -301,15 +306,19 @@ alwaysApply: true # Conflicts with manual rule type
 5. Reserve Manual rules for specialized cases
 
 This type system ensures rules are applied appropriately while maintaining flexibility for different use cases.
+</subsection-best-practices>
 </section-rule-types>
 
 <section-private-rules>
 ## Private Rules, Custom Agents, and Configuration
 
+<subsection-private-rules-overview>
 ### Private Rules Overview
 
 Private rules provide a way to maintain personal or team-specific rules that don't need to be shared with the entire repository. These rules can be stored in your user-specific `.cursor/rules` folder and will be applied across all your projects.
+</subsection-private-rules-overview>
 
+<subsection-rules-structure>
 #### User-Specific Rules Structure
 ```
 ~/.cursor/rules/                    # User's personal rules directory
@@ -322,14 +331,18 @@ Private rules provide a way to maintain personal or team-specific rules that don
 └── team-rules/                     # Team-specific rules
     └── team-standards-auto.mdc     # Team conventions
 ```
+</subsection-rules-structure>
 
+<subsection-benefits>
 #### Benefits of Private Rules
 - Apply consistently across all projects you open
 - Maintain personal preferences without affecting team repository
 - Test rules before proposing them to the team
 - Keep project-specific customizations separate
 - Override repository rules when needed
+</subsection-benefits>
 
+<subsection-custom-agents-config>
 ### Custom Agents Configuration
 
 Custom agents provide fine-grained control over AI behavior and capabilities. They can be configured with specific tools, models, and prompts to create specialized assistants for different tasks.
@@ -455,14 +468,19 @@ As Cursor evolves, the configuration system will be enhanced with new features:
    - Remove unused configurations
 
 Remember: Private rules and custom agents provide powerful ways to tailor Cursor's behavior to your specific needs while maintaining clean separation between personal, team, and project-specific configurations. 🔧
+</subsection-custom-agents-config>
 </section-private-rules>
 
 <section-custom-agents>
 ## Custom Agent Generation
 
+<subsection-overview>
 Custom Agents allow scoping and guidance to what an agent can and cannot do, more directly than using cursor rules files. With a custom agent, you can specify what tools the agent can and cannot use (both cursor native and mcp), and more importantly you can control what model it uses and give it a custom prompt to guide how it operates. This is like a direct injection of a clear always rule for this specific type of agent you have created. When combined with the Agile workflow, you can have a dedicated Project Manager Agent, an Architect Agent, Designer and UX Expert Agents, Front End, Back End, and Language Specific Expert Developers and keep them all focused on what they are good at, and providing them real guardrails.
+</subsection-overview>
 
+<subsection-future-updates>
 Cursor in an upcoming update will allow the creation and maintainability of these in a JSON file - in the meantime, these have to be created manually 1 by one in a gui that is a bit flaky and the text entry are is very small.
+</subsection-future-updates>
 
 So I have come up with a file format to store all the information of my custom agents - which not currently used by cursor, it is an easy way to configure all of their options and define their custom prompts in a text editor - and then input or update via the GUI.
 
@@ -564,25 +582,31 @@ In the future, that modes.json file will be replaced by the official file format
 - Keeping outdated or ineffective rules
 - Not documenting rule changes
 - Ignoring rule conflicts
-- Poor rule organization
+- Poor rule **organization**
 
 ### Integration with Development Workflow
 
+<section-workflow-integration>
+<subsection-custom-agents>
 #### Custom Agents and Rules
 - Align rules with custom agent capabilities
 - Use rules to enhance agent effectiveness
 - Consider rule impact on different agent types
 - Maintain consistency across agents
 - Document agent-specific rule requirements
+</subsection-custom-agents>
 
+<subsection-project-evolution>
 #### Project Evolution
 - Adapt rules as the project grows
 - Consider scalability in rule design
 - Plan for future rule requirements
 - Monitor rule performance at scale
 - Regular rule system audits
+</subsection-project-evolution>
 
 Remember: The rule system is a living part of your development process. It should evolve and adapt with your project while maintaining clarity and effectiveness. Regular review and refinement ensure your rules continue to add value without creating unnecessary complexity. 🎯
+</section-workflow-integration>
 </section-best-practices>
 
 <section-file-exclusions>
