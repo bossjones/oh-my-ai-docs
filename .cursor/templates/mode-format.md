@@ -71,7 +71,7 @@ The following models are currently supported for the `model` field:
 - `gemini-2.0-flash`
 - `gemini-2.0-flash-exp`
 - `gemini-2.0-pro-exp`
-- `gemini-2.5-pro-exp-05-25`
+- `gemini-2.5-pro-exp-03-25`
 - `gemini-2.5-pro-max`
 - `gemini-exp-1206`
 - `gpt-3.5-turbo`
