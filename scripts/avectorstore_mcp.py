@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# async version, will come back to this
 # pyright: reportUnknownArgumentType=false
 
 import argparse
@@ -8,7 +9,7 @@ import json
 # import logging
 import os
 from asyncio import timeout
-from contextlib import asynccontextmanager, contextmanager
+from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Any, Dict, List, Optional, TypeVar
 
@@ -166,8 +167,8 @@ class DocumentResponse(BaseModel):
     scores: list[float]
     total_found: int
 
-@contextmanager
-def vectorstore_session(vectorstore_path: str):
+@asynccontextmanager
+async def vectorstore_session(vectorstore_path: str):
     """Context manager for vectorstore operations."""
     try:
         store = SKLearnVectorStore(
@@ -185,7 +186,7 @@ def vectorstore_session(vectorstore_path: str):
     name="query_docs",
     description="Search through module documentation using semantic search to find relevant information based on your query"
 )
-def query_tool(
+async def query_tool(
     query: str,
     ctx: Context[Any, Any],
     config: QueryConfig | None = None
@@ -209,6 +210,7 @@ def query_tool(
     Raises:
         ToolError: If the query operation fails or returns invalid results
         ValueError: If the query string is empty or invalid
+        TimeoutError: If the query operation takes longer than 30 seconds
     """
     if not query.strip():
         raise ValueError("Query cannot be empty")
@@ -217,36 +219,40 @@ def query_tool(
     vectorstore_path = DOCS_PATH / args.module / "vectorstore" / f"{args.module}_vectorstore.parquet"
 
     try:
-        with vectorstore_session(str(vectorstore_path)) as store:
-            ctx.info(f"Querying vectorstore with k={config.k}")
+        async with timeout(30):  # Prevent hanging on API calls
+            async with vectorstore_session(str(vectorstore_path)) as store:
+                await ctx.info(f"Querying vectorstore with k={config.k}")
 
-            retriever = store.as_retriever(
-                search_kwargs={"k": config.k}
-            )
+                retriever = store.as_retriever(
+                    search_kwargs={"k": config.k}
+                )
 
-            relevant_docs: list[Document] = retriever.invoke(query)
+                relevant_docs: list[Document] = retriever.invoke(query)
 
-            ctx.info(f"Retrieved {len(relevant_docs)} relevant documents")
+                await ctx.info(f"Retrieved {len(relevant_docs)} relevant documents")
 
-            documents: list[str] = []
-            scores: list[float] = []
+                documents: list[str] = []
+                scores: list[float] = []
 
-            for i, doc in enumerate(relevant_docs):
-                if hasattr(doc, 'metadata') and doc.metadata.get('score', 1.0) < config.min_relevance_score:
-                    continue
+                for i, doc in enumerate(relevant_docs):
+                    if hasattr(doc, 'metadata') and doc.metadata.get('score', 1.0) < config.min_relevance_score:
+                        continue
 
-                documents.append(doc.page_content)
-                scores.append(doc.metadata.get('score', 1.0) if hasattr(doc, 'metadata') else 1.0)
-                ctx.report_progress(i + 1, len(relevant_docs))
+                    documents.append(doc.page_content)
+                    scores.append(doc.metadata.get('score', 1.0) if hasattr(doc, 'metadata') else 1.0)
+                    await ctx.report_progress(i + 1, len(relevant_docs))
 
-            return DocumentResponse(
-                documents=documents,
-                scores=scores,
-                total_found=len(relevant_docs)
-            )
+                return DocumentResponse(
+                    documents=documents,
+                    scores=scores,
+                    total_found=len(relevant_docs)
+                )
 
+    except TimeoutError:
+        await ctx.error("Query timed out")
+        raise ToolError("Query operation timed out after 30 seconds")
     except Exception as e:
-        ctx.error(f"Query failed: {e!s}")
+        await ctx.error(f"Query failed: {e!s}")
         raise ToolError(f"Failed to query vectorstore: {e!s}")
 
 
@@ -257,7 +263,7 @@ def query_tool(
     description="Retrieves the full documentation content for a specified module (discord, dpytest, or langgraph). Returns the raw text content from the module's documentation file.",
     mime_type="text/plain",
 )
-def get_all_docs(module: str) -> str:
+async def get_all_docs(module: str) -> str:
     """
     Get all the documentation for the specified module. Returns the contents of the {module}_docs.txt file,
     which contains a curated set of documentation. This is useful for a comprehensive response to questions.
@@ -273,24 +279,41 @@ def get_all_docs(module: str) -> str:
     """
     try:
         if module != args.module:
+            # logger.error("Module mismatch", extra={
+            #     "requested_module": module,
+            #     "server_module": args.module
+            # })
             raise ResourceError(f"Requested module '{module}' does not match server module '{args.module}'")
 
         # Local path to the documentation
         doc_path = DOCS_PATH / module / f"{module}_docs.txt"
 
         if not doc_path.exists():
+            # logger.error("Documentation file not found", extra={
+            #     "module": module,
+            #     "path": str(doc_path)
+            # })
             raise ResourceError(f"Documentation file not found for module: {module}")
 
-        with open(doc_path) as file:
-            content = file.read()
+        async with aiofiles.open(doc_path) as file:
+            content = await file.read()
+            # logger.info("Successfully read documentation", extra={
+            #     "module": module,
+            #     "size": len(content)
+            # })
             return content
 
     except ResourceError:
         raise
     except Exception as e:
+        # logger.error("Error reading documentation", extra={
+        #     "module": module,
+        #     "error": str(e)
+        # })
         raise ResourceError(f"Error reading documentation file: {e}")
 
 if __name__ == "__main__":
+    import asyncio
     if args.list_vectorstores:
         list_vectorstores()
     elif args.generate_mcp_config:
@@ -304,5 +327,8 @@ if __name__ == "__main__":
         print("\nDry run completed. Use without --dry-run to start the server.")
     else:
         # Initialize and run the server
-        print(f"Starting MCP server for {args.module} documentation...")
+        # print(f"Starting MCP server for {args.module} documentation...")
+        # asyncio.run(mcp.run(transport='stdio'))
+        # For STDIO:
+        # anyio.run(start_server_stdio)
         mcp.run(transport='stdio')

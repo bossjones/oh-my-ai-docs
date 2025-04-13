@@ -5,7 +5,7 @@ vectorstore-discord:
 
 [group('vectorstore')]
 vectorstore-discord-inspector:
-    npx -y @modelcontextprotocol/inspector uv run ./scripts/vectorstore_mcp.py --module discord
+    npx -y @modelcontextprotocol/inspector@0.8.2 uv run ./scripts/vectorstore_mcp.py --module discord
 
 [group('vectorstore')]
 vectorstore-discord-dry-run:

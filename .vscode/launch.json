@@ -7,7 +7,7 @@
         {
             // SOURCE: https://github.com/langflow-ai/langflow/blob/99454a3d5d9574114b134070744d3155b8251320/.vscode/launch.json#L8
             "name": "Debug Backend FastAPI",
-            "type": "python",
+            "type": "debugpy",
             "request": "launch",
             "module": "uvicorn",
             "args": [
@@ -30,7 +30,7 @@
             // When omitted or set to true (the default), restricts debugging to user-written code only. Set to false to also enable debugging of standard library functions.
             "justMyCode": false,
             "env": {
-                "DYNAMODB_ENDPOINT_URL": "http://localdb:8000",
+                "DYNAMODB_ENDPOINT_URL": "http://localhost:8000",
                 "ENVIRONMENT_NAME": "local",
                 "REGION_NAME": "local",
                 "AWS_ACCESS_KEY_ID": "fake",
@@ -41,14 +41,14 @@
         },
         {
             "name": "Debug Slack Agent app.py",
-            "type": "python",
+            "type": "debugpy",
             "request": "launch",
             // "module": "python",
             "program": "${workspaceFolder}/app/app.py",
             "jinja": true,
             "justMyCode": false,
             "env": {
-                "DYNAMODB_ENDPOINT_URL": "http://localdb:8000",
+                "DYNAMODB_ENDPOINT_URL": "http://localhost:8000",
                 "ENVIRONMENT_NAME": "local",
                 "REGION_NAME": "local",
                 "AWS_ACCESS_KEY_ID": "fake",
@@ -59,26 +59,48 @@
         },
         {
             "name": "Python: Current File",
-            "type": "python",
+            "type": "debugpy",
             "request": "launch",
             "program": "${file}",
             "console": "integratedTerminal",
-            "justMyCode": true
+            "justMyCode": true,
+            "env": {
+                "PYTHONPATH": "${workspaceFolder}"
+            }
         },
         {
             "name": "Python: Debug Tests",
-            "type": "python",
+            "type": "debugpy",
             "request": "launch",
             "program": "${file}",
             "purpose": [
                 "debug-test"
             ],
             "console": "integratedTerminal",
-            "justMyCode": false
+            "justMyCode": false,
+            "env": {
+                "PYTHONPATH": "${workspaceFolder}"
+            }
+        },
+        {
+            "name": "Python: pytest",
+            "type": "debugpy",
+            "request": "launch",
+            "module": "pytest",
+            "args": [
+                "--verbose",
+                "--showlocals",
+                "--tb=short",
+                "-v"
+            ],
+            "cwd": "${workspaceFolder}",
+            "env": {
+                "PYTHONPATH": "${workspaceFolder}"
+            }
         },
         {
             "name": "Python: pytest with debugger",
-            "type": "python",
+            "type": "debugpy",
             "request": "launch",
             "module": "pytest",
             "args": [
@@ -87,10 +109,14 @@
                 "--tb=short",
                 "--pdb",
                 "--pdbcls=bpdb:BPdb",
-                "-m retryonly",
+                "-m",
+                "retryonly",
                 "."
             ],
-            "cwd": "${workspaceFolder}/app"
+            "cwd": "${workspaceFolder}/app",
+            "env": {
+                "PYTHONPATH": "${workspaceFolder}"
+            }
         },
         {
             "name": "UV Debug Slack Agent app.py",
@@ -102,7 +128,25 @@
             "env": {
                 "DYNAMODB_ENDPOINT_URL": "http://localhost:8000",
                 "ENVIRONMENT_NAME": "local",
-                "REGION_NAME": "local"
+                "REGION_NAME": "local",
+                "PYTHONPATH": "${workspaceFolder}"
+            },
+            "envFile": "${workspaceFolder}/.env",
+            "python": "${workspaceFolder}/.venv/bin/python"
+        },
+        {
+            "name": "UV Debug Vectorstore MCP Discord",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${workspaceFolder}/scripts/vectorstore_mcp.py",
+            "args": [
+                "--module",
+                "discord"
+            ],
+            "jinja": true,
+            "justMyCode": false,
+            "env": {
+                "PYTHONPATH": "${workspaceFolder}"
             },
             "envFile": "${workspaceFolder}/.env",
             "python": "${workspaceFolder}/.venv/bin/python"
