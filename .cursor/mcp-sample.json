@@ -24,6 +24,22 @@
         "--host",
         "localhost"
       ]
+    },
+    "fastmcp-docs-mcp": {
+      "command": "uvx",
+      "args": [
+        "--from",
+        "mcpdoc",
+        "mcpdoc",
+        "--urls",
+        "fastmcp:https://modelcontextprotocol.io/llms-full.txt",
+        "--transport",
+        "stdio",
+        "--port",
+        "8081",
+        "--host",
+        "localhost"
+      ]
     }
   }
 }
