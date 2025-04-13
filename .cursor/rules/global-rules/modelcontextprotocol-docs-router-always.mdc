@@ -1,0 +1,21 @@
+---
+description:
+globs:
+alwaysApply: true
+---
+# Model Context Protocol Documentation Router
+
+## Critical Rules
+
+- For ANY question about Model Context Protocol specifications or implementation details:
+  1. ALWAYS call list_doc_sources tool first to retrieve llms.txt
+  2. Call fetch_docs to read the llms.txt content
+  3. Analyze and reflect on:
+     - All URLs listed in llms.txt, particularly those with "modelcontextprotocol:" prefix
+     - The specific user question context and requirements
+     - Protocol version compatibility if mentioned
+  4. Call fetch_docs again ONLY for URLs relevant to the user's question
+  5. Synthesize information from fetched docs to provide accurate answers
+  6. Include relevant protocol examples when appropriate
+  7. Cite specific documentation sources used in the response
+  8. Use the modelcontextprotocol-docs-mcp server configuration when available

@@ -1,13 +1,15 @@
 #!/usr/bin/env python3
 # pyright: reportUnknownArgumentType=false
+# pyright: reportUnusedCoroutine=false
+# DO NOT MAKE THIS SERVER ASYNC
 
 import argparse
 import glob
 import json
-
-# import logging
 import os
+import sys
 from asyncio import timeout
+from collections.abc import Generator
 from contextlib import asynccontextmanager, contextmanager
 from pathlib import Path
 from typing import Any, Dict, List, Optional, TypeVar
@@ -19,11 +21,7 @@ from langchain_core.documents.base import Document
 from langchain_openai import OpenAIEmbeddings
 from mcp.server.fastmcp import Context, FastMCP
 from mcp.server.fastmcp.exceptions import ResourceError
-
-# from mcp.server.fastmcp.utilities.logging import get_logger
 from pydantic import BaseModel, Field, field_validator
-
-# logger = get_logger(__name__)
 
 T = TypeVar('T')
 
@@ -43,10 +41,23 @@ parser.add_argument('--generate-mcp-config', action='store_true',
                   help='Generate mcp.json configuration for all modules')
 parser.add_argument('--save', action='store_true',
                   help='Save the generated mcp.json configuration to disk')
+parser.add_argument('--stdio', action='store_true', default=True,
+                  help='Run in stdio mode with all logging/printing disabled')
+parser.add_argument('--debug', action='store_true',
+                  help='Enable debug mode with verbose logging')
 
 args = parser.parse_args()
 
+# Custom print function that respects the --stdio flag
+def safe_print(*print_args: Any, **print_kwargs: Any) -> None:
+    """Print function that respects the --stdio flag from argparse.
 
+    Args:
+        *print_args: Variable positional arguments to pass to print()
+        **print_kwargs: Variable keyword arguments to pass to print()
+    """
+    if not args.stdio:
+        print(*print_args, **print_kwargs)
 
 def get_config_info():
     """Get configuration information for display"""
@@ -70,13 +81,13 @@ def get_config_info():
 
 def list_vectorstores():
     """Search for and list all .parquet files in the docs directory"""
-    print("\n=== Available Vector Stores ===\n")
+    safe_print("\n=== Available Vector Stores ===\n")
 
     # Find all .parquet files recursively
     parquet_files: list[Path] = list(DOCS_PATH.glob("**/*.parquet"))
 
     if not parquet_files:
-        print("No vector stores found.")
+        safe_print("No vector stores found.")
         return
 
     # Group by module
@@ -89,12 +100,12 @@ def list_vectorstores():
 
     # Print the results
     for module, files in stores_by_module.items():
-        print(f"Module: {module}")
+        safe_print(f"Module: {module}")
         for file in files:
-            print(f"  - {file.relative_to(BASE_PATH)}")
-        print()
+            safe_print(f"  - {file.relative_to(BASE_PATH)}")
+        safe_print()
 
-    print(f"Total vector stores found: {len(parquet_files)}")
+    safe_print(f"Total vector stores found: {len(parquet_files)}")
 
 def generate_mcp_config() -> dict[str, dict[str, Any]]:
     """Generate mcp.json configuration for all modules"""
@@ -110,19 +121,22 @@ def generate_mcp_config() -> dict[str, dict[str, Any]]:
 
     for module in modules:
         server_name = f"{module}-docs-mcp-server".lower()
+        server_args = [
+            "run",
+            "--directory", str(BASE_PATH),
+            f"./{relative_script_path}",
+            "--module", module,
+            "--stdio"  # Add the stdio flag to disable logging
+        ]
+
         mcp_config["mcpServers"][server_name] = {
             "command": "uv",
-            "args": [
-                "run",
-                "--directory", str(BASE_PATH),
-                f"./{relative_script_path}",
-                "--module", module
-            ]
+            "args": server_args
         }
 
     # Print the generated config
-    print("\n=== Generated MCP Configuration ===\n")
-    print(json.dumps(mcp_config, indent=2))
+    safe_print("\n=== Generated MCP Configuration ===\n")
+    safe_print(json.dumps(mcp_config, indent=2))
 
     return mcp_config
 
@@ -131,14 +145,14 @@ def save_mcp_config(config: dict[str, dict[str, Any]]) -> None:
     save_path = BASE_PATH / "mcp.json"
     with open(save_path, 'w') as f:
         json.dump(config, indent=2, fp=f)
-    print(f"\nConfiguration saved to {save_path}")
+    safe_print(f"\nConfiguration saved to {save_path}")
 
 # Create an MCP server with module name
-mcp = FastMCP(f"{args.module}-docs-mcp-server".lower())
-
-# Option 2: Run with STDIO transport
-async def start_server_stdio():
-    await mcp.run_stdio_async()
+mcp = FastMCP(
+    f"{args.module}-docs-mcp-server".lower(),
+    debug=args.debug,
+    log_level="DEBUG" if args.debug else "INFO"
+)
 
 
 class MCPError(Exception):
@@ -167,8 +181,15 @@ class DocumentResponse(BaseModel):
     total_found: int
 
 @contextmanager
-def vectorstore_session(vectorstore_path: str):
-    """Context manager for vectorstore operations."""
+def vectorstore_session(vectorstore_path: str) -> Generator[SKLearnVectorStore, None, None]:
+    """Context manager for vectorstore operations.
+
+    Args:
+        vectorstore_path (str): Path to the vectorstore file
+
+    Yields:
+        SKLearnVectorStore: An instance of SKLearnVectorStore for querying embeddings
+    """
     try:
         store = SKLearnVectorStore(
             embedding=OpenAIEmbeddings(model="text-embedding-3-large"),
@@ -218,7 +239,8 @@ def query_tool(
 
     try:
         with vectorstore_session(str(vectorstore_path)) as store:
-            ctx.info(f"Querying vectorstore with k={config.k}")
+            if not args.stdio:
+                ctx.info(f"Querying vectorstore with k={config.k}")
 
             retriever = store.as_retriever(
                 search_kwargs={"k": config.k}
@@ -226,7 +248,8 @@ def query_tool(
 
             relevant_docs: list[Document] = retriever.invoke(query)
 
-            ctx.info(f"Retrieved {len(relevant_docs)} relevant documents")
+            if not args.stdio:
+                ctx.info(f"Retrieved {len(relevant_docs)} relevant documents")
 
             documents: list[str] = []
             scores: list[float] = []
@@ -237,7 +260,9 @@ def query_tool(
 
                 documents.append(doc.page_content)
                 scores.append(doc.metadata.get('score', 1.0) if hasattr(doc, 'metadata') else 1.0)
-                ctx.report_progress(i + 1, len(relevant_docs))
+
+                if not args.stdio:
+                    ctx.report_progress(i + 1, len(relevant_docs))
 
             return DocumentResponse(
                 documents=documents,
@@ -246,7 +271,8 @@ def query_tool(
             )
 
     except Exception as e:
-        ctx.error(f"Query failed: {e!s}")
+        if not args.stdio:
+            ctx.error(f"Query failed: {e!s}")
         raise ToolError(f"Failed to query vectorstore: {e!s}")
 
 
@@ -291,6 +317,11 @@ def get_all_docs(module: str) -> str:
         raise ResourceError(f"Error reading documentation file: {e}")
 
 if __name__ == "__main__":
+    # If --stdio is enabled, redirect stdout and stderr to devnull
+    # if args.stdio:
+    #     sys.stdout = open(os.devnull, 'w')
+    #     sys.stderr = open(os.devnull, 'w')
+
     if args.list_vectorstores:
         list_vectorstores()
     elif args.generate_mcp_config:
@@ -299,10 +330,10 @@ if __name__ == "__main__":
             save_mcp_config(config)
     elif args.dry_run:
         config = get_config_info()
-        print("\n=== MCP Server Configuration ===\n")
-        print(json.dumps(config, indent=2))
-        print("\nDry run completed. Use without --dry-run to start the server.")
+        safe_print("\n=== MCP Server Configuration ===\n")
+        safe_print(json.dumps(config, indent=2))
+        safe_print("\nDry run completed. Use without --dry-run to start the server.")
     else:
         # Initialize and run the server
-        print(f"Starting MCP server for {args.module} documentation...")
+        safe_print(f"Starting MCP server for {args.module} documentation...")
         mcp.run(transport='stdio')

@@ -150,6 +150,30 @@
             },
             "envFile": "${workspaceFolder}/.env",
             "python": "${workspaceFolder}/.venv/bin/python"
+        },
+        {
+            "name": "UV Debug MCP Inspector Discord",
+            "type": "debugpy",
+            "request": "launch",
+            "module": "npx",
+            "args": [
+                "-y",
+                "@modelcontextprotocol/inspector",
+                "uv",
+                "run",
+                "./scripts/vectorstore_mcp.py",
+                "--module",
+                "discord",
+                "--stdio",
+                "--debug"
+            ],
+            "jinja": true,
+            "justMyCode": false,
+            "env": {
+                "PYTHONPATH": "${workspaceFolder}"
+            },
+            "envFile": "${workspaceFolder}/.env",
+            "python": "${workspaceFolder}/.venv/bin/python"
         }
     ]
 }

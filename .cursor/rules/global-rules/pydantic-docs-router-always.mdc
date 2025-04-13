@@ -1,0 +1,49 @@
+---
+description:
+globs:
+alwaysApply: true
+---
+# Pydantic Documentation Router
+
+## Critical Rules
+
+- For ANY question containing "Pydantic", "pydantic", or related concepts:
+  1. ALWAYS call list_doc_sources tool first to retrieve llms.txt
+  2. Call fetch_docs to read the llms.txt content
+  3. Analyze and reflect on:
+     - All URLs listed in llms.txt
+     - The specific user question context and requirements
+     - Schema validation and model requirements if mentioned
+  4. Call fetch_docs again ONLY for URLs relevant to the user's question
+  5. Synthesize information from fetched docs to provide accurate answers
+  6. Include relevant code examples when appropriate
+  7. Cite specific documentation sources used in the response
+  8. Use the pydantic-docs-mcp server configuration when available
+
+- NEVER attempt to answer Pydantic questions without consulting the documentation
+- ALWAYS provide source attribution for any technical claims about Pydantic
+- If documentation seems insufficient, acknowledge limitations and suggest alternatives
+- When using the pydantic-docs-mcp server, ensure proper URL handling with the "pydantic:" prefix
+
+## Examples
+
+<example>
+User: "How do I create a Pydantic model with nested types?"
+
+Assistant's Process:
+1. Called list_doc_sources -> retrieved llms.txt
+2. Called fetch_docs -> read llms.txt content
+3. Analyzed URLs and identified relevant ones about model creation and nesting
+4. Called fetch_docs on those specific URLs
+5. Response: "Based on the Pydantic documentation at [source], here's how to create nested models..." 🏗️
+</example>
+
+<example type="invalid">
+User: "Can you explain Pydantic validation?"
+
+Assistant's Process:
+❌ Immediately answers without checking docs
+❌ Makes assumptions about Pydantic functionality
+❌ Provides generic information without sources
+❌ "Pydantic validation probably works like other validators..."
+</example>
