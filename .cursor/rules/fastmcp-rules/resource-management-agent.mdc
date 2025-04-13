@@ -134,7 +134,7 @@ alwaysApply: false
 
 <example>
 # Complete Resource Management Implementation
-from fastmcp import FastMCP
+from mcp.server.fastmcp import FastMCP
 from pathlib import Path
 
 app = FastMCP(name="ResourceDemo")
