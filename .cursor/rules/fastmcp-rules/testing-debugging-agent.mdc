@@ -8,7 +8,100 @@ alwaysApply: false
 
 ## Critical Rules
 
-1. **Unit Testing Patterns**
+1. **Test Organization and Structure**
+   - Organize test classes by component functionality (e.g., TestServer, TestServerTools, TestServerResources)
+   - Follow consistent test method naming: test_[feature]_[scenario]
+   - Group related test cases within the same test class
+   - Include clear test class docstrings explaining scope
+   - Example:
+   ```python
+   # ✅ Good
+   class TestServerTools:
+       """Test suite for FastMCP server tool management functionality.
+
+       Covers:
+       - Tool registration and validation
+       - Tool execution and error handling
+       - Tool parameter processing
+       - Tool lifecycle management
+       """
+
+       def test_tool_registration_success(self):
+           """Test successful registration of a new tool."""
+           # Test implementation
+
+       def test_tool_registration_duplicate(self):
+           """Test handling of duplicate tool registration."""
+           # Test implementation
+
+       def test_tool_execution_valid_params(self):
+           """Test tool execution with valid parameters."""
+           # Test implementation
+
+   # ❌ Bad
+   class Tests:  # No clear scope
+       def test_1(self):  # Unclear naming
+           pass
+
+       def test_something(self):  # Vague naming
+           pass
+   ```
+
+2. **Async Testing Requirements**
+   - Use @pytest.mark.anyio for all async tests
+   - Test both sync and async versions of similar functionality
+   - Implement proper async context management
+   - Handle timeout scenarios in async operations
+   - Example:
+   ```python
+   # ✅ Good
+   # Standard library
+   from typing import AsyncGenerator
+   import asyncio
+
+   # Third-party
+   import pytest
+   from pydantic import BaseModel
+
+   # MCP packages
+   from mcp.server.fastmcp import FastMCP
+   from mcp.server.fastmcp.testing import TestClient
+   from mcp.server.fastmcp.cache import Cache, CacheManager
+   from mcp.server.fastmcp.utilities.logging import get_logger
+
+   class TestAsyncOperations:
+       @pytest.fixture
+       async def async_client() -> AsyncGenerator:
+           client = AsyncClient()
+           await client.connect()
+           yield client
+           await client.disconnect()
+
+       @pytest.mark.anyio
+       async def test_async_operation_success(self, async_client):
+           """Test successful async operation with timeout."""
+           async with async_timeout(1.0):
+               result = await async_client.process_data({"key": "value"})
+               assert result.status == "success"
+
+       @pytest.mark.anyio
+       async def test_async_operation_timeout(self, async_client):
+           """Test async operation timeout handling."""
+           with pytest.raises(TimeoutError):
+               async with async_timeout(0.1):
+                   await async_client.slow_operation()
+
+   # ❌ Bad
+   class TestBad:
+       async def test_async(self):  # Missing anyio marker
+           result = await process()
+           assert result
+
+       def test_mixed(self):  # Mixing sync/async incorrectly
+           result = await process()  # Will fail
+   ```
+
+3. **Unit Testing Patterns**
    - Write comprehensive test cases
    - Use proper test isolation
    - Implement test fixtures
@@ -63,7 +156,7 @@ alwaysApply: false
        assert cache.get("key") is None  # Too simple
    ```
 
-2. **Integration Testing**
+4. **Integration Testing**
    - Test component interactions
    - Set up test environments
    - Handle external dependencies
@@ -130,7 +223,7 @@ alwaysApply: false
        assert response.ok  # Insufficient verification
    ```
 
-3. **Error Simulation**
+5. **Error Simulation**
    - Test error scenarios
    - Simulate system failures
    - Handle timeout conditions
@@ -205,7 +298,7 @@ alwaysApply: false
            pass  # No verification
    ```
 
-4. **Debugging Strategies**
+6. **Debugging Strategies**
    - Implement proper logging
    - Use debugging contexts
    - Handle debug information
@@ -272,72 +365,1150 @@ alwaysApply: false
            return process(data)
    ```
 
-5. **Performance Testing**
-   - Measure response times
-   - Test under load
-   - Monitor resource usage
-   - Verify scaling behavior
+7. **Performance Testing**
+   - Test response times under load
+   - Verify concurrent operation handling
+   - Monitor resource utilization
+   - Test scaling behavior
    - Example:
    ```python
    # ✅ Good
-   import pytest
-   from fastmcp import FastMCP, LoadTester
-   from typing import List
+   # Standard library
+   from typing import List, Dict, Any
    import asyncio
    import statistics
+   import time
+   import resource
 
-   class PerformanceTest:
-       def __init__(
-           self,
-           app: FastMCP,
-           concurrent_users: int = 10,
-           duration: float = 60.0
-       ):
-           self._app = app
-           self._users = concurrent_users
-           self._duration = duration
-           self._results: List[float] = []
+   # Third-party
+   import pytest
+   import psutil
 
-       async def run_load_test(self) -> dict:
-           start = asyncio.get_event_loop().time()
-           tasks = []
+   # MCP packages
+   from mcp.server.fastmcp import FastMCP
+   from mcp.server.fastmcp.testing import LoadTester
+   from mcp.server.fastmcp.utilities.metrics import MetricsCollector
 
-           for _ in range(self._users):
-               task = asyncio.create_task(
-                   self._user_session()
+   class TestPerformance:
+       """Test suite for FastMCP performance characteristics.
+
+       Covers:
+       - Response time measurements
+       - Concurrent operations
+       - Resource utilization
+       - Scaling behavior
+       """
+
+       @pytest.fixture
+       async def app(self) -> FastMCP:
+           app = FastMCP()
+           await app.startup()
+           yield app
+           await app.shutdown()
+
+       @pytest.fixture
+       def metrics(self) -> MetricsCollector:
+           return MetricsCollector()
+
+       @pytest.mark.anyio
+       async def test_response_times(self, app, metrics):
+           """Test response time distribution under load."""
+           @app.tool()
+           async def sample_operation(data: Dict[str, Any]) -> Dict[str, Any]:
+               await asyncio.sleep(0.1)  # Simulated work
+               return {"processed": True, **data}
+
+           async with LoadTester(app, concurrent_users=10) as lt:
+               results = await lt.run_scenario(
+                   "sample_operation",
+                   {"test": "data"},
+                   duration_seconds=30
                )
-               tasks.append(task)
+
+               response_times = results.response_times
+               assert statistics.mean(response_times) < 0.2  # 200ms avg
+               assert statistics.quantiles(response_times)[2] < 0.3  # P95 < 300ms
+
+               metrics.record_histogram(
+                   "response_times",
+                   response_times,
+                   unit="seconds"
+               )
+
+       @pytest.mark.anyio
+       async def test_concurrent_operations(self, app):
+           """Test behavior under concurrent load."""
+           @app.tool()
+           async def concurrent_op(delay: float) -> str:
+               await asyncio.sleep(delay)
+               return "done"
+
+           # Launch multiple concurrent operations
+           tasks = [
+               app.execute_tool(
+                   "concurrent_op",
+                   {"delay": 0.1}
+               )
+               for _ in range(100)
+           ]
+
+           start = time.monotonic()
+           results = await asyncio.gather(*tasks)
+           duration = time.monotonic() - start
+
+           # Should complete in roughly 0.1s, not 10s (100 * 0.1)
+           assert duration < 0.3  # Allow some overhead
+           assert all(r == "done" for r in results)
+
+       @pytest.mark.anyio
+       async def test_resource_utilization(self, app, metrics):
+           """Test resource usage under load."""
+           process = psutil.Process()
+           initial_memory = process.memory_info().rss
+
+           @app.tool()
+           async def memory_intensive(size: int) -> List[int]:
+               # Simulate memory-intensive operation
+               data = list(range(size))
+               await asyncio.sleep(0.1)
+               return data
+
+           # Run memory-intensive operations
+           tasks = [
+               app.execute_tool(
+                   "memory_intensive",
+                   {"size": 10000}
+               )
+               for _ in range(10)
+           ]
 
            await asyncio.gather(*tasks)
+           peak_memory = process.memory_info().rss
 
-           return {
-               "total_requests": len(self._results),
-               "avg_response_time": statistics.mean(self._results),
-               "p95_response_time": statistics.quantiles(
-                   self._results,
-                   n=20
-               )[18],  # 95th percentile
-               "max_response_time": max(self._results)
-           }
+           # Record metrics
+           metrics.gauge(
+               "memory_usage",
+               peak_memory - initial_memory,
+               unit="bytes"
+           )
 
-       async def _user_session(self):
-           end_time = asyncio.get_event_loop().time() + self._duration
-           while asyncio.get_event_loop().time() < end_time:
-               start = asyncio.get_event_loop().time()
-               await self._app.test_client.get("/test")
-               self._results.append(
-                   asyncio.get_event_loop().time() - start
-               )
-               await asyncio.sleep(1.0)  # Think time
+           # Verify cleanup
+           await asyncio.sleep(0.5)  # Allow GC
+           final_memory = process.memory_info().rss
+           assert final_memory < peak_memory * 0.8  # Memory released
 
    # ❌ Bad
-   def test_bad_performance():
-       app = FastMCP()
-       start = time.time()
-       app.test_client.get("/")  # Single request
-       duration = time.time() - start
-       assert duration < 1  # Arbitrary threshold
+   class TestBadPerformance:
+       def test_simple_timing(self):
+           start = time.time()
+           process_data()  # Single operation
+           duration = time.time() - start
+           assert duration < 1  # Arbitrary threshold
+
+       def test_no_concurrent_load(self):
+           for _ in range(10):  # Sequential, not concurrent
+               process_request()
    ```
+
+8. **Error Handling and Edge Cases**
+   - Test all error scenarios explicitly
+   - Validate error message content and format
+   - Test boundary conditions thoroughly
+   - Cover invalid input scenarios
+   - Test type validation errors
+   - Example:
+   ```python
+   # ✅ Good
+   # Standard library
+   from typing import Any
+   import asyncio
+
+   # Third-party
+   import pytest
+
+   # MCP packages
+   from mcp.server.fastmcp.exceptions import ToolError, ValidationError
+   from mcp.server.fastmcp.tools import ToolManager
+   from mcp.server.fastmcp.testing import AsyncClient
+
+   class TestErrorHandling:
+       """Test suite for error handling and edge cases.
+
+       Covers:
+       - Input validation errors
+       - Runtime errors
+       - Edge cases and boundary conditions
+       - Error message formatting
+       """
+
+       @pytest.mark.anyio
+       async def test_invalid_tool_parameters(self):
+           """Test tool execution with invalid parameters."""
+           tool_manager = ToolManager()
+
+           with pytest.raises(ValidationError) as exc_info:
+               await tool_manager.call_tool(
+                   "process_data",
+                   {"count": "not_a_number"}  # Invalid type
+               )
+
+           assert "invalid type" in str(exc_info.value)
+           assert "expected integer" in str(exc_info.value)
+
+       @pytest.mark.anyio
+       async def test_boundary_conditions(self):
+           """Test handling of boundary values."""
+           test_cases = [
+               (2**31 - 1, "max_int"),    # Max 32-bit int
+               (-2**31, "min_int"),       # Min 32-bit int
+               ("" * 1024, "empty_str"),  # Empty string
+               ("a" * 1024, "long_str"),  # Very long string
+           ]
+
+           for value, case in test_cases:
+               try:
+                   result = await process_input(value)
+                   assert result.is_valid, f"Failed for case: {case}"
+               except ValidationError as e:
+                   assert e.is_boundary_error, f"Unexpected error for case: {case}"
+
+       @pytest.mark.anyio
+       async def test_concurrent_error_handling(self):
+           """Test error handling during concurrent operations."""
+           async with AsyncClient() as client:
+               # Test concurrent error scenarios
+               tasks = [
+                   client.process({"invalid": i})
+                   for i in range(10)
+               ]
+
+               results = await asyncio.gather(
+                   *tasks,
+                   return_exceptions=True
+               )
+
+               # Verify all errors were handled properly
+               for result in results:
+                   assert isinstance(result, ValidationError)
+                   assert result.error_code == "INVALID_INPUT"
+
+   # ❌ Bad
+   class TestBadErrorHandling:
+       def test_simple_error(self):
+           with pytest.raises(Exception):  # Too generic
+               process_data(None)
+
+       def test_incomplete(self):
+           result = process_data(-1)
+           assert not result  # Insufficient error checking
+   ```
+
+9. **Resource Testing**
+   - Test all resource types (text, binary, file)
+   - Validate resource URI templates
+   - Test resource parameter validation
+   - Verify resource access permissions
+   - Example:
+   ```python
+   # ✅ Good
+   # Standard library
+   from pathlib import Path
+   from typing import Dict
+
+   # Third-party
+   import pytest
+
+   # MCP packages
+   from mcp.server.fastmcp.resources import FileResource, TextResource, BinaryResource
+   from mcp.server.fastmcp.resources.templates import ResourceTemplate
+   from mcp.server.fastmcp.context import Context
+   from mcp.server.fastmcp.exceptions import ValidationError, PermissionError
+
+   class TestResources:
+       """Test suite for FastMCP resource management.
+
+       Covers:
+       - Resource type handling
+       - URI template validation
+       - Parameter processing
+       - Access control
+       """
+
+       @pytest.fixture
+       async def test_files(tmp_path: Path):
+           # Set up test files
+           text_file = tmp_path / "test.txt"
+           text_file.write_text("Hello, World!")
+
+           binary_file = tmp_path / "test.bin"
+           binary_file.write_bytes(b"\x00\x01\x02\x03")
+
+           yield {
+               "text": text_file,
+               "binary": binary_file
+           }
+
+           # Cleanup
+           text_file.unlink()
+           binary_file.unlink()
+
+       @pytest.mark.anyio
+       async def test_text_resource_handling(self, test_files):
+           """Test text resource loading and processing."""
+           resource = TextResource(test_files["text"])
+           content = await resource.read()
+
+           assert isinstance(content, str)
+           assert content == "Hello, World!"
+           assert resource.mime_type == "text/plain"
+
+       @pytest.mark.anyio
+       async def test_binary_resource_handling(self, test_files):
+           """Test binary resource handling."""
+           resource = BinaryResource(test_files["binary"])
+           content = await resource.read()
+
+           assert isinstance(content, bytes)
+           assert content == b"\x00\x01\x02\x03"
+
+       @pytest.mark.anyio
+       async def test_resource_uri_templates(self):
+           """Test resource URI template handling."""
+           @resource("resource://{org}/{repo}/data")
+           async def get_data(org: str, repo: str) -> str:
+               return f"Data for {org}/{repo}"
+
+           # Test valid URIs
+           result = await get_data("test-org", "test-repo")
+           assert result == "Data for test-org/test-repo"
+
+           # Test invalid URIs
+           with pytest.raises(ValidationError):
+               await get_data("invalid/org", "repo")  # Invalid character in org
+
+       @pytest.mark.anyio
+       async def test_resource_permissions(self):
+           """Test resource access control."""
+           @resource("secure://data/{id}")
+           async def get_secure_data(id: str, ctx: Context) -> str:
+               if not ctx.has_permission("read:data"):
+                   raise PermissionError("No access")
+               return f"Secure data {id}"
+
+           # Test with different permission contexts
+           async with create_context(permissions=["read:data"]) as ctx:
+               result = await get_secure_data("123", ctx)
+               assert result == "Secure data 123"
+
+           async with create_context(permissions=[]) as ctx:
+               with pytest.raises(PermissionError):
+                   await get_secure_data("123", ctx)
+
+   # ❌ Bad
+   class TestBadResources:
+       def test_simple_file(self):
+           with open("test.txt", "r") as f:  # Direct file access
+               data = f.read()
+           assert data  # Insufficient validation
+
+       def test_missing_cleanup(self, tmp_path):
+           file = tmp_path / "test.txt"
+           file.write_text("data")
+           # Missing cleanup
+   ```
+
+10. **Context Management**
+    - Test context injection in tools and resources
+    - Validate optional context handling
+    - Test context state preservation
+    - Verify context logging functionality
+    - Example:
+    ```python
+    # ✅ Good
+    # Standard library
+    from typing import Optional, Dict, Any
+
+    # Third-party
+    import pytest
+
+    # MCP packages
+    from mcp.server.fastmcp import FastMCP
+    from mcp.server.fastmcp.context import Context
+    from mcp.server.fastmcp.utilities.logging import get_logger
+
+    class TestContextManagement:
+        """Test suite for FastMCP context management.
+
+        Covers:
+        - Context injection
+        - State preservation
+        - Optional context handling
+        - Context logging
+        """
+
+        @pytest.fixture
+        async def mcp_app(self) -> FastMCP:
+            app = FastMCP()
+            await app.startup()
+            yield app
+            await app.shutdown()
+
+        @pytest.mark.anyio
+        async def test_context_injection(self, mcp_app):
+            """Test automatic context injection in tools."""
+            @mcp_app.tool()
+            async def tool_with_context(data: str, ctx: Context) -> str:
+                assert isinstance(ctx, Context)
+                ctx.log.info(f"Processing: {data}")
+                return f"Processed {data}"
+
+            result = await mcp_app.execute_tool(
+                "tool_with_context",
+                {"data": "test"}
+            )
+            assert result == "Processed test"
+
+        @pytest.mark.anyio
+        async def test_optional_context(self, mcp_app):
+            """Test tools with optional context parameter."""
+            @mcp_app.tool()
+            async def tool_optional_ctx(
+                data: str,
+                ctx: Optional[Context] = None
+            ) -> str:
+                if ctx:
+                    ctx.log.info("Using context")
+                return f"Data: {data}"
+
+            # Test with and without context
+            result1 = await mcp_app.execute_tool(
+                "tool_optional_ctx",
+                {"data": "test1"}
+            )
+            assert result1 == "Data: test1"
+
+            async with mcp_app.create_context() as ctx:
+                result2 = await mcp_app.execute_tool(
+                    "tool_optional_ctx",
+                    {"data": "test2"},
+                    context=ctx
+                )
+                assert result2 == "Data: test2"
+
+        @pytest.mark.anyio
+        async def test_context_state_preservation(self, mcp_app):
+            """Test context state preservation across calls."""
+            @mcp_app.tool()
+            async def stateful_tool(key: str, value: str, ctx: Context) -> str:
+                # Store in context state
+                if not hasattr(ctx.state, "data"):
+                    ctx.state.data = {}
+                ctx.state.data[key] = value
+                return "OK"
+
+            @mcp_app.tool()
+            async def read_state(key: str, ctx: Context) -> str:
+                return ctx.state.data.get(key, "NOT_FOUND")
+
+            async with mcp_app.create_context() as ctx:
+                # Write state
+                await mcp_app.execute_tool(
+                    "stateful_tool",
+                    {"key": "test", "value": "data"},
+                    context=ctx
+                )
+
+                # Read state
+                result = await mcp_app.execute_tool(
+                    "read_state",
+                    {"key": "test"},
+                    context=ctx
+                )
+                assert result == "data"
+
+        @pytest.mark.anyio
+        async def test_context_logging(self, mcp_app):
+            """Test context logging functionality."""
+            @mcp_app.tool()
+            async def logging_tool(msg: str, ctx: Context) -> None:
+                ctx.log.debug("Debug message")
+                ctx.log.info(msg)
+                ctx.log.warning("Warning message")
+
+                # Test structured logging
+                ctx.log.info(
+                    "Structured log",
+                    extra={
+                        "request_id": "123",
+                        "user": "test"
+                    }
+                )
+
+            # Capture and verify logs
+            async with mcp_app.create_context() as ctx:
+                await mcp_app.execute_tool(
+                    "logging_tool",
+                    {"msg": "Test message"},
+                    context=ctx
+                )
+
+                logs = ctx.get_logs()
+                assert any(
+                    log.message == "Test message"
+                    for log in logs
+                )
+                assert any(
+                    log.level == "WARNING"
+                    for log in logs
+                )
+                assert any(
+                    log.extra.get("request_id") == "123"
+                    for log in logs
+                )
+
+    # ❌ Bad
+    class TestBadContextHandling:
+        def test_global_context(self):
+            # Using global context - bad practice
+            global_ctx = Context()
+            result = process_with_context(global_ctx)
+            assert result
+
+        def test_missing_cleanup(self):
+            ctx = Context()
+            # Missing context cleanup
+            result = process_with_context(ctx)
+            assert result
+    ```
+
+11. **Tool Management**
+    - Test tool registration and deregistration
+    - Validate tool parameter handling
+    - Test tool naming conflicts
+    - Verify tool versioning
+    - Example:
+    ```python
+    # ✅ Good
+    # Standard library
+    from typing import Any, Optional, Dict
+    import asyncio
+
+    # Third-party
+    import pytest
+    from pydantic import BaseModel, Field
+
+    # MCP packages
+    from mcp.server.fastmcp.tools import ToolManager, Tool
+    from mcp.server.fastmcp.exceptions import ToolError, ValidationError
+    from mcp.server.fastmcp.context import Context
+
+    class TestToolManagement:
+        """Test suite for FastMCP tool management functionality.
+
+        Covers:
+        - Tool registration and deregistration
+        - Parameter validation
+        - Naming conflicts
+        - Tool versioning
+        """
+
+        class UserInput(BaseModel):
+            name: str = Field(..., min_length=1)
+            age: int = Field(..., ge=0)
+
+        @pytest.fixture
+        def tool_manager(self) -> ToolManager:
+            return ToolManager()
+
+        @pytest.mark.anyio
+        async def test_tool_registration(self, tool_manager):
+            """Test tool registration with various parameter types."""
+            # Simple tool
+            @tool_manager.register
+            async def simple_tool(x: int) -> int:
+                return x * 2
+
+            # Complex tool with Pydantic model
+            @tool_manager.register
+            async def complex_tool(user: UserInput, ctx: Context) -> Dict[str, Any]:
+                return {
+                    "id": "123",
+                    **user.model_dump()
+                }
+
+            tools = tool_manager.list_tools()
+            assert len(tools) == 2
+            assert "simple_tool" in {t.name for t in tools}
+            assert "complex_tool" in {t.name for t in tools}
+
+        @pytest.mark.anyio
+        async def test_tool_deregistration(self, tool_manager):
+            """Test proper tool deregistration."""
+            @tool_manager.register
+            async def temp_tool() -> str:
+                return "test"
+
+            assert tool_manager.get_tool("temp_tool") is not None
+            tool_manager.deregister_tool("temp_tool")
+            assert tool_manager.get_tool("temp_tool") is None
+
+        @pytest.mark.anyio
+        async def test_tool_naming_conflicts(self, tool_manager):
+            """Test handling of tool naming conflicts."""
+            @tool_manager.register
+            async def my_tool() -> str:
+                return "v1"
+
+            # Attempt to register with same name
+            with pytest.raises(ToolError) as exc_info:
+                @tool_manager.register
+                async def my_tool() -> str:  # Same name
+                    return "v2"
+
+            assert "already exists" in str(exc_info.value)
+
+        @pytest.mark.anyio
+        async def test_tool_versioning(self, tool_manager):
+            """Test tool versioning functionality."""
+            @tool_manager.register(version="1.0.0")
+            async def versioned_tool() -> str:
+                return "v1"
+
+            @tool_manager.register(version="2.0.0", name="versioned_tool_v2")
+            async def versioned_tool_v2() -> str:
+                return "v2"
+
+            v1_result = await tool_manager.call_tool("versioned_tool", {})
+            v2_result = await tool_manager.call_tool("versioned_tool_v2", {})
+
+            assert v1_result == "v1"
+            assert v2_result == "v2"
+
+            tool_v1 = tool_manager.get_tool("versioned_tool")
+            tool_v2 = tool_manager.get_tool("versioned_tool_v2")
+
+            assert tool_v1.version == "1.0.0"
+            assert tool_v2.version == "2.0.0"
+
+    # ❌ Bad
+    class TestBadToolManagement:
+        def test_global_tool_registry(self):
+            # Using global registry - bad practice
+            global_registry = {}
+
+            def register_tool(name, func):
+                global_registry[name] = func  # No validation or error handling
+
+            def my_tool():
+                return "test"
+
+            register_tool("my_tool", my_tool)
+
+        def test_missing_validation(self):
+            def process(data: dict):
+                # Missing input validation
+                return data["value"] * 2
+
+            ToolManager().register(process)  # No error handling
+    ```
+
+12. **Input/Output Testing**
+    - Test complex input types (Pydantic models)
+    - Validate various return types
+    - Test input serialization/deserialization
+    - Verify Unicode and special character handling
+    - Example:
+    ```python
+    # ✅ Good
+    # Standard library
+    from typing import List, Dict, Any, Optional
+    from datetime import datetime
+    import json
+
+    # Third-party
+    import pytest
+    from pydantic import BaseModel, Field
+
+    # MCP packages
+    from mcp.server.fastmcp.tools import ToolManager
+    from mcp.server.fastmcp.exceptions import ValidationError
+    from mcp.server.fastmcp.utilities.types import Image
+
+    class TestInputOutput:
+        """Test suite for FastMCP input/output handling.
+
+        Covers:
+        - Complex data types
+        - Serialization
+        - Special characters
+        - Return type validation
+        """
+
+        class ComplexInput(BaseModel):
+            text: str = Field(..., min_length=1)
+            numbers: List[int] = Field(..., min_items=1)
+            metadata: Dict[str, Any] = Field(default_factory=dict)
+            timestamp: Optional[datetime] = None
+
+        @pytest.fixture
+        def tool_manager(self) -> ToolManager:
+            return ToolManager()
+
+        @pytest.mark.anyio
+        async def test_complex_input_handling(self, tool_manager):
+            """Test handling of complex input types."""
+            @tool_manager.register
+            async def process_complex(data: ComplexInput) -> Dict[str, Any]:
+                return {
+                    "processed": True,
+                    "text_length": len(data.text),
+                    "sum_numbers": sum(data.numbers),
+                    **data.metadata
+                }
+
+            result = await tool_manager.call_tool(
+                "process_complex",
+                {
+                    "text": "Hello",
+                    "numbers": [1, 2, 3],
+                    "metadata": {"key": "value"},
+                    "timestamp": "2024-01-01T00:00:00Z"
+                }
+            )
+
+            assert result["processed"] is True
+            assert result["text_length"] == 5
+            assert result["sum_numbers"] == 6
+            assert result["key"] == "value"
+
+        @pytest.mark.anyio
+        async def test_unicode_handling(self, tool_manager):
+            """Test handling of Unicode and special characters."""
+            @tool_manager.register
+            async def process_unicode(text: str) -> Dict[str, str]:
+                return {
+                    "original": text,
+                    "length": len(text),
+                    "reversed": text[::-1]
+                }
+
+            test_strings = [
+                "Hello, 世界!",  # Mixed ASCII and Unicode
+                "🌟 Stars ✨",   # Emojis
+                "α, β, γ",      # Greek letters
+                "\\n\\t\\r"     # Escape sequences
+            ]
+
+            for text in test_strings:
+                result = await tool_manager.call_tool(
+                    "process_unicode",
+                    {"text": text}
+                )
+                assert result["original"] == text
+                assert result["reversed"] == text[::-1]
+
+        @pytest.mark.anyio
+        async def test_binary_data_handling(self, tool_manager):
+            """Test handling of binary data types."""
+            @tool_manager.register
+            async def process_image(image: Image) -> Dict[str, Any]:
+                return {
+                    "mime_type": image.mime_type,
+                    "size": len(image.data),
+                    "metadata": image.metadata
+                }
+
+            # Test with various image types
+            test_cases = [
+                (b"PNG data", "image/png"),
+                (b"JPEG data", "image/jpeg"),
+                (b"GIF data", "image/gif")
+            ]
+
+            for data, mime_type in test_cases:
+                result = await tool_manager.call_tool(
+                    "process_image",
+                    {
+                        "data": data,
+                        "mime_type": mime_type,
+                        "metadata": {"source": "test"}
+                    }
+                )
+
+                assert result["mime_type"] == mime_type
+                assert result["size"] == len(data)
+                assert result["metadata"]["source"] == "test"
+
+    # ❌ Bad
+    class TestBadIO:
+        def test_unsafe_deserialization(self):
+            data = '{"command": "rm -rf /"}'
+            result = json.loads(data)  # No validation
+            process_command(result["command"])
+
+        def test_missing_encoding(self):
+            text = "Hello, 世界"
+            bytes_data = text.encode()  # No specified encoding
+            decoded = bytes_data.decode()  # No error handling
+    ```
+
+13. **Integration Testing**
+    - Test component interactions
+    - Verify external service integration
+    - Test end-to-end workflows
+    - Validate system boundaries
+    - Example:
+    ```python
+    # ✅ Good
+    # Standard library
+    from typing import AsyncGenerator, Dict, Any
+    import asyncio
+    from datetime import datetime
+
+    # Third-party
+    import pytest
+    import httpx
+    from redis.asyncio import Redis
+
+    # MCP packages
+    from mcp.server.fastmcp import FastMCP
+    from mcp.server.fastmcp.testing import TestClient, MockExternalService
+    from mcp.server.fastmcp.cache import Cache
+    from mcp.server.fastmcp.context import Context
+
+    class TestIntegration:
+        """Test suite for FastMCP integration scenarios.
+
+        Covers:
+        - Component interactions
+        - External services
+        - End-to-end workflows
+        - System boundaries
+        """
+
+        @pytest.fixture
+        async def app(self) -> AsyncGenerator[FastMCP, None]:
+            app = FastMCP()
+            await app.startup()
+            yield app
+            await app.shutdown()
+
+        @pytest.fixture
+        async def redis(self) -> AsyncGenerator[Redis, None]:
+            redis = Redis.from_url("redis://localhost")
+            await redis.flushall()  # Clean state
+            yield redis
+            await redis.close()
+
+        @pytest.fixture
+        async def mock_external(self) -> AsyncGenerator[MockExternalService, None]:
+            async with MockExternalService() as service:
+                yield service
+
+        @pytest.mark.anyio
+        async def test_end_to_end_workflow(
+            self,
+            app: FastMCP,
+            redis: Redis,
+            mock_external: MockExternalService
+        ):
+            """Test complete workflow with multiple components."""
+            # Setup mock responses
+            mock_external.get(
+                "/api/data",
+                json={"status": "success", "data": "test"}
+            )
+
+            # Register tools
+            @app.tool()
+            async def fetch_and_cache(
+                key: str,
+                ctx: Context
+            ) -> Dict[str, Any]:
+                # Fetch from external service
+                async with httpx.AsyncClient() as client:
+                    response = await client.get(
+                        f"{mock_external.base_url}/api/data"
+                    )
+                    data = response.json()
+
+                # Cache in Redis
+                await redis.set(
+                    f"cache:{key}",
+                    str(data),
+                    ex=3600
+                )
+
+                # Log operation
+                ctx.log.info(
+                    "Data fetched and cached",
+                    key=key,
+                    timestamp=datetime.utcnow()
+                )
+
+                return data
+
+            @app.tool()
+            async def process_cached(
+                key: str,
+                ctx: Context
+            ) -> Dict[str, Any]:
+                # Read from cache
+                cached = await redis.get(f"cache:{key}")
+                if not cached:
+                    raise ValueError("Cache miss")
+
+                # Process data
+                result = {
+                    "processed": True,
+                    "cache_hit": True,
+                    "data": cached.decode()
+                }
+
+                # Log result
+                ctx.log.info(
+                    "Data processed from cache",
+                    key=key,
+                    timestamp=datetime.utcnow()
+                )
+
+                return result
+
+            # Execute workflow
+            async with app.create_context() as ctx:
+                # Step 1: Fetch and cache
+                await app.execute_tool(
+                    "fetch_and_cache",
+                    {"key": "test_key"},
+                    context=ctx
+                )
+
+                # Verify cache
+                cached = await redis.get("cache:test_key")
+                assert cached is not None
+
+                # Step 2: Process cached data
+                result = await app.execute_tool(
+                    "process_cached",
+                    {"key": "test_key"},
+                    context=ctx
+                )
+
+                assert result["processed"] is True
+                assert result["cache_hit"] is True
+
+                # Verify logs
+                logs = ctx.get_logs()
+                assert any(
+                    "Data fetched and cached" in log.message
+                    for log in logs
+                )
+                assert any(
+                    "Data processed from cache" in log.message
+                    for log in logs
+                )
+
+    # ❌ Bad
+    class TestBadIntegration:
+        def test_direct_dependencies(self):
+            redis = Redis()  # Direct dependency
+            data = redis.get("key")  # No cleanup
+
+        def test_missing_mocks(self):
+            response = httpx.get(
+                "https://api.example.com"
+            )  # Real HTTP call in test
+    ```
+
+14. **Documentation and Maintenance**
+    - Document test requirements and setup
+    - Manage test fixtures effectively
+    - Handle test data properly
+    - Implement cleanup procedures
+    - Example:
+    ```python
+    # ✅ Good
+    # Standard library
+    from typing import AsyncGenerator, Dict, Any
+    from pathlib import Path
+    import json
+    import shutil
+
+    # Third-party
+    import pytest
+    from pydantic import BaseModel
+
+    # MCP packages
+    from mcp.server.fastmcp import FastMCP
+    from mcp.server.fastmcp.testing import TestClient
+    from mcp.server.fastmcp.utilities.logging import get_logger
+
+    class TestDocumentation:
+        """Test suite demonstrating documentation and maintenance best practices.
+
+        This test suite shows:
+        1. Proper test documentation
+        2. Fixture management
+        3. Test data handling
+        4. Cleanup procedures
+
+        Setup Requirements:
+        - Redis server running on localhost:6379
+        - Test data files in tests/data/
+        - Environment variables in tests/.env
+
+        Usage:
+        ```bash
+        # Run all tests
+        pytest tests/
+
+        # Run specific test class
+        pytest tests/test_documentation.py::TestDocumentation
+
+        # Run with coverage
+        pytest --cov=mcp.server.fastmcp tests/
+        ```
+        """
+
+        @pytest.fixture(scope="session")
+        def test_data_dir(tmp_path_factory) -> Path:
+            """Create and manage test data directory.
+
+            This fixture:
+            1. Creates a temporary directory
+            2. Copies test data files
+            3. Cleans up after tests
+            """
+            base_dir = tmp_path_factory.mktemp("test_data")
+
+            # Copy test data
+            src_dir = Path("tests/data")
+            if src_dir.exists():
+                shutil.copytree(
+                    src_dir,
+                    base_dir / "data",
+                    dirs_exist_ok=True
+                )
+
+            yield base_dir
+
+            # Cleanup
+            shutil.rmtree(base_dir)
+
+        @pytest.fixture
+        async def app(self, test_data_dir: Path) -> AsyncGenerator[FastMCP, None]:
+            """Create and configure FastMCP application.
+
+            This fixture:
+            1. Creates FastMCP instance
+            2. Configures with test settings
+            3. Handles startup/shutdown
+            """
+            app = FastMCP()
+
+            # Load test configuration
+            config_path = test_data_dir / "config.json"
+            if config_path.exists():
+                config = json.loads(config_path.read_text())
+                app.configure(config)
+
+            await app.startup()
+            yield app
+            await app.shutdown()
+
+        @pytest.mark.anyio
+        async def test_with_documentation(
+            self,
+            app: FastMCP,
+            test_data_dir: Path
+        ):
+            """Demonstrate well-documented test with proper setup and cleanup.
+
+            This test shows:
+            1. Clear purpose and requirements
+            2. Proper fixture usage
+            3. Test data management
+            4. Cleanup handling
+
+            Args:
+                app: Configured FastMCP instance
+                test_data_dir: Path to test data directory
+
+            The test verifies:
+            1. Data loading from test files
+            2. Processing functionality
+            3. Result validation
+            """
+            # Load test data
+            data_file = test_data_dir / "data/sample.json"
+            test_data = json.loads(data_file.read_text())
+
+            # Process data
+            result = await app.process_data(test_data)
+
+            # Validate results
+            assert result["status"] == "success"
+            assert "processed_at" in result
+
+            # Log test completion
+            get_logger(__name__).info(
+                "Test completed",
+                test_name="test_with_documentation",
+                result=result
+            )
+
+        def test_data_management(self, test_data_dir: Path):
+            """Demonstrate proper test data handling.
+
+            Shows:
+            1. Test data organization
+            2. Data validation
+            3. Cleanup procedures
+            """
+            # Create test data
+            data_dir = test_data_dir / "generated"
+            data_dir.mkdir(exist_ok=True)
+
+            try:
+                # Generate test files
+                for i in range(3):
+                    file_path = data_dir / f"test_{i}.json"
+                    data = {
+                        "id": i,
+                        "name": f"Test {i}",
+                        "created_at": "2024-01-01T00:00:00Z"
+                    }
+                    file_path.write_text(json.dumps(data))
+
+                # Verify data
+                for i in range(3):
+                    file_path = data_dir / f"test_{i}.json"
+                    assert file_path.exists()
+                    data = json.loads(file_path.read_text())
+                    assert data["id"] == i
+
+            finally:
+                # Cleanup generated files
+                if data_dir.exists():
+                    shutil.rmtree(data_dir)
+
+    # ❌ Bad
+    class TestBadDocumentation:
+        def test_undocumented(self):
+            # No docstring
+            # No clear purpose
+            # No cleanup
+            data = {"test": True}
+            result = process(data)
+            assert result
+
+        def test_hardcoded_paths(self):
+            # Bad: Hardcoded paths
+            with open("/tmp/test.json", "w") as f:
+                json.dump({"data": "test"}, f)
+
+            # No cleanup
+    ```
 
 ## Examples
 
@@ -369,4 +1540,23 @@ import httpx
 from mcp.server.fastmcp import FastMCP
 from mcp.server.fastmcp.testing import TestClient, LoadTester
 from mcp.server.fastmcp.cache import Cache
+from mcp.server.fastmcp.utilities.logging import get_logger
+
+# ✅ Good
+import pytest
+from mcp.server.fastmcp import FastMCP
+from mcp.server.fastmcp.exceptions import ToolError, ValidationError
+from mcp.server.fastmcp.tools import ToolManager
+
+# ✅ Good
+import pytest
+from pathlib import Path
+from mcp.server.fastmcp.resources import FileResource, TextResource, BinaryResource
+from mcp.server.fastmcp.resources.templates import ResourceTemplate
+
+# ✅ Good
+import pytest
+from typing import Optional
+from mcp.server.fastmcp import FastMCP
+from mcp.server.fastmcp.context import Context
 from mcp.server.fastmcp.utilities.logging import get_logger
