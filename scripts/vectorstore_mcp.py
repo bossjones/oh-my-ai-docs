@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# pyright: reportUnknownArgumentType=false
 
 import argparse
 import glob
@@ -11,6 +12,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional, TypeVar
 
 from langchain_community.vectorstores import SKLearnVectorStore
+from langchain_core.documents.base import Document
 from langchain_openai import OpenAIEmbeddings
 from mcp.server.fastmcp import Context, FastMCP
 from pydantic import BaseModel, Field, field_validator
@@ -164,7 +166,10 @@ async def vectorstore_session(vectorstore_path: str):
         pass
 
 # Add a tool to query the documentation
-@mcp.tool()
+@mcp.tool(
+    name="query_docs",
+    description="Search through module documentation using semantic search to find relevant information based on your query"
+)
 async def query_tool(
     query: str,
     ctx: Context[Any, Any],
@@ -174,16 +179,22 @@ async def query_tool(
     Query the documentation using a retriever.
 
     Args:
-        query (str): The query to search the documentation with
-        ctx (Context[Any, Any]): Tool context for progress reporting
-        config (Optional[QueryConfig], optional): Configuration for the query. Defaults to None.
+        query (str): The query string to search for in the documentation
+        ctx (Context[Any, Any]): Tool context for progress reporting and status updates
+        config (Optional[QueryConfig]): Query configuration parameters including:
+            - k (int): Number of documents to retrieve (1-10, default=3)
+            - min_relevance_score (float): Minimum relevance score threshold (0.0-1.0, default=0.0)
 
     Returns:
-        DocumentResponse: A structured response containing retrieved documents and metadata
+        DocumentResponse: A structured response containing:
+            - documents (List[str]): List of retrieved document contents
+            - scores (List[float]): Corresponding relevance scores for each document
+            - total_found (int): Total number of documents found before filtering
 
     Raises:
-        ToolError: If the query fails or returns invalid results
-        ValueError: If the query is empty or invalid
+        ToolError: If the query operation fails or returns invalid results
+        ValueError: If the query string is empty or invalid
+        TimeoutError: If the query operation takes longer than 30 seconds
     """
     if not query.strip():
         raise ValueError("Query cannot be empty")
@@ -200,7 +211,7 @@ async def query_tool(
                     search_kwargs={"k": config.k}
                 )
 
-                relevant_docs = retriever.invoke(query)
+                relevant_docs: list[Document] = retriever.invoke(query)
 
                 await ctx.info(f"Retrieved {len(relevant_docs)} relevant documents")
 
