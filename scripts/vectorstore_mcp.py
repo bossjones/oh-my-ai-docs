@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 
-
 import argparse
+import glob
 import json
 from pathlib import Path
 
@@ -19,6 +19,8 @@ parser.add_argument('--module', type=str, choices=['discord', 'dpytest', 'langgr
                   default='langgraph', help='Module to query (default: langgraph)')
 parser.add_argument('--dry-run', action='store_true',
                   help='Show configuration without starting the server')
+parser.add_argument('--list-vectorstores', action='store_true',
+                  help='List available vector stores (searches for .parquet files)')
 
 args = parser.parse_args()
 
@@ -41,6 +43,34 @@ def get_config_info():
         }
     }
     return config
+
+def list_vectorstores():
+    """Search for and list all .parquet files in the docs directory"""
+    print("\n=== Available Vector Stores ===\n")
+
+    # Find all .parquet files recursively
+    parquet_files = list(DOCS_PATH.glob("**/*.parquet"))
+
+    if not parquet_files:
+        print("No vector stores found.")
+        return
+
+    # Group by module
+    stores_by_module = {}
+    for file in parquet_files:
+        module_name = file.parent.parent.name
+        if module_name not in stores_by_module:
+            stores_by_module[module_name] = []
+        stores_by_module[module_name].append(file)
+
+    # Print the results
+    for module, files in stores_by_module.items():
+        print(f"Module: {module}")
+        for file in files:
+            print(f"  - {file.relative_to(BASE_PATH)}")
+        print()
+
+    print(f"Total vector stores found: {len(parquet_files)}")
 
 # Create an MCP server with module name
 mcp = FastMCP(f"{args.module}-docs-mcp-server".lower())
@@ -95,7 +125,9 @@ def get_all_docs(module: str) -> str:
         return f"Error reading documentation file: {e!s}"
 
 if __name__ == "__main__":
-    if args.dry_run:
+    if args.list_vectorstores:
+        list_vectorstores()
+    elif args.dry_run:
         config = get_config_info()
         print("\n=== MCP Server Configuration ===\n")
         print(json.dumps(config, indent=2))
