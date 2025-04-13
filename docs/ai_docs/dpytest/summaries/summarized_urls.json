@@ -1,5 +1,13 @@
 {
   "https://dpytest.readthedocs.io/en/latest/modules/index.html": "dpytest.readthedocs.io_en_latest_modules_index.html.txt",
   "https://dpytest.readthedocs.io/en/latest/index.html": "dpytest.readthedocs.io_en_latest_index.html.txt",
-  "https://dpytest.readthedocs.io/en/latest/tutorials/index.html": "dpytest.readthedocs.io_en_latest_tutorials_index.html.txt"
+  "https://dpytest.readthedocs.io/en/latest/tutorials/index.html": "dpytest.readthedocs.io_en_latest_tutorials_index.html.txt",
+  "https://dpytest.readthedocs.io/en/latest/modules/backend.html": "dpytest.readthedocs.io_en_latest_modules_backend.html.txt",
+  "https://dpytest.readthedocs.io/en/latest/modules/callbacks.html": "dpytest.readthedocs.io_en_latest_modules_callbacks.html.txt",
+  "https://dpytest.readthedocs.io/en/latest/modules/factories.html": "dpytest.readthedocs.io_en_latest_modules_factories.html.txt",
+  "https://dpytest.readthedocs.io/en/latest/modules/runner.html": "dpytest.readthedocs.io_en_latest_modules_runner.html.txt",
+  "https://dpytest.readthedocs.io/en/latest/modules/state.html": "dpytest.readthedocs.io_en_latest_modules_state.html.txt",
+  "https://dpytest.readthedocs.io/en/latest/modules/utils.html": "dpytest.readthedocs.io_en_latest_modules_utils.html.txt",
+  "https://dpytest.readthedocs.io/en/latest/modules/verify.html": "dpytest.readthedocs.io_en_latest_modules_verify.html.txt",
+  "https://dpytest.readthedocs.io/en/latest/modules/websocket.html": "dpytest.readthedocs.io_en_latest_modules_websocket.html.txt"
 }

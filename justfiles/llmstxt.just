@@ -5,6 +5,14 @@ llmstxt-dpytest:
     --urls https://dpytest.readthedocs.io/en/latest/index.html \
     https://dpytest.readthedocs.io/en/latest/tutorials/index.html \
     https://dpytest.readthedocs.io/en/latest/modules/index.html \
+    https://dpytest.readthedocs.io/en/latest/modules/backend.html \
+    https://dpytest.readthedocs.io/en/latest/modules/callbacks.html \
+    https://dpytest.readthedocs.io/en/latest/modules/factories.html \
+    https://dpytest.readthedocs.io/en/latest/modules/runner.html \
+    https://dpytest.readthedocs.io/en/latest/modules/state.html \
+    https://dpytest.readthedocs.io/en/latest/modules/utils.html \
+    https://dpytest.readthedocs.io/en/latest/modules/verify.html \
+    https://dpytest.readthedocs.io/en/latest/modules/websocket.html \
     --max-depth 3 \
     --llm-name claude-3-7-sonnet-latest \
     --llm-provider anthropic \
