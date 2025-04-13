@@ -1,6 +1,8 @@
-#!/Users/malcolm/dev/bossjones/oh-my-ai-docs/.venv/bin/python
+#!/usr/bin/env python3
+
 
 import argparse
+import json
 from pathlib import Path
 
 from langchain_community.vectorstores import SKLearnVectorStore
@@ -15,11 +17,33 @@ DOCS_PATH = BASE_PATH / "docs/ai_docs"
 parser = argparse.ArgumentParser(description='MCP Server for vectorstore queries')
 parser.add_argument('--module', type=str, choices=['discord', 'dpytest', 'langgraph'],
                   default='langgraph', help='Module to query (default: langgraph)')
+parser.add_argument('--dry-run', action='store_true',
+                  help='Show configuration without starting the server')
 
 args = parser.parse_args()
 
+def get_config_info():
+    """Get configuration information for display"""
+    module_path = DOCS_PATH / args.module
+    config = {
+        "server_name": f"{args.module}-docs-mcp-server".lower(),
+        "module": args.module,
+        "paths": {
+            "base_path": str(BASE_PATH),
+            "docs_path": str(DOCS_PATH),
+            "module_path": str(module_path),
+            "vectorstore": str(module_path / "vectorstore" / f"{args.module}_vectorstore.parquet"),
+            "docs_file": str(module_path / f"{args.module}_docs.txt")
+        },
+        "available_endpoints": {
+            "tool": f"query_tool - Query {args.module} documentation",
+            "resource": f"docs://{args.module}/full - Get full {args.module} documentation"
+        }
+    }
+    return config
+
 # Create an MCP server with module name
-mcp = FastMCP(f"{args.module.capitalize()}-Docs-MCP-Server")
+mcp = FastMCP(f"{args.module}-docs-mcp-server".lower())
 
 # Add a tool to query the documentation
 @mcp.tool()
@@ -71,5 +95,12 @@ def get_all_docs(module: str) -> str:
         return f"Error reading documentation file: {e!s}"
 
 if __name__ == "__main__":
-    # Initialize and run the server
-    mcp.run(transport='stdio')
+    if args.dry_run:
+        config = get_config_info()
+        print("\n=== MCP Server Configuration ===\n")
+        print(json.dumps(config, indent=2))
+        print("\nDry run completed. Use without --dry-run to start the server.")
+    else:
+        # Initialize and run the server
+        print(f"Starting MCP server for {args.module} documentation...")
+        mcp.run(transport='stdio')
