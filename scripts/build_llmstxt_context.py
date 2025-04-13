@@ -22,6 +22,9 @@ MODULE_URLS: dict[str, list[str]] = {
         "https://langchain-ai.github.io/langgraph/tutorials/workflows/",
         "https://langchain-ai.github.io/langgraph/tutorials/introduction/",
         "https://langchain-ai.github.io/langgraph/tutorials/langgraph-platform/local-server/",
+        "https://python.langchain.com/docs/get_started/introduction/",
+        "https://python.langchain.com/docs/modules/",
+        "https://python.langchain.com/docs/use_cases/",
     ],
     "langchain": [
         "https://python.langchain.com/docs/get_started/introduction/",
