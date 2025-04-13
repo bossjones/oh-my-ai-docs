@@ -1,0 +1,468 @@
+---
+description: This rule governs integration patterns in FastMCP servers. It should be applied whenever: (1) Implementing client integrations, (2) Integrating with external services, (3) Setting up event handling, (4) Managing message formats, or (5) Ensuring protocol compatibility. The rule ensures consistent integration patterns, reliable service communication, and robust event handling across all FastMCP server implementations.
+globs:
+alwaysApply: false
+---
+
+# FastMCP Integration Rules
+
+## Critical Rules
+
+1. **Client Integration Patterns**
+   - Implement proper client SDKs
+   - Handle client versioning
+   - Manage client state
+   - Support client discovery
+   - Example:
+   ```python
+   # ✅ Good
+   from fastmcp import FastMCP, Client
+   from typing import Optional
+   from pydantic import BaseModel
+   import semver
+
+   class ClientConfig(BaseModel):
+       api_version: str
+       base_url: str
+       timeout: float = 30.0
+       retry_attempts: int = 3
+
+   class FastMCPClient:
+       def __init__(self, config: ClientConfig):
+           self._config = config
+           self._client = Client(
+               base_url=config.base_url,
+               timeout=config.timeout
+           )
+           self._validate_version()
+
+       def _validate_version(self) -> None:
+           if not semver.match(
+               self._config.api_version,
+               ">=1.0.0"
+           ):
+               raise ValueError("Unsupported API version")
+
+       async def connect(self) -> None:
+           info = await self._client.get_server_info()
+           if not semver.match(
+               info.version,
+               self._config.api_version
+           ):
+               raise ValueError("Version mismatch")
+
+   # ❌ Bad
+   class BadClient:
+       def __init__(self, url: str):
+           self.url = url  # No validation
+           self.connected = False  # No proper state
+   ```
+
+2. **External Service Integration**
+   - Implement service discovery
+   - Handle service health checks
+   - Manage service configuration
+   - Support service failover
+   - Example:
+   ```python
+   # ✅ Good
+   from fastmcp import ServiceRegistry
+   from typing import List, Optional
+   from pydantic import BaseModel
+   import aiohttp
+   import asyncio
+
+   class ServiceConfig(BaseModel):
+       name: str
+       url: str
+       health_check_interval: float = 30.0
+       timeout: float = 5.0
+       required: bool = True
+
+   class ServiceManager:
+       def __init__(self):
+           self._registry = ServiceRegistry()
+           self._health_tasks: dict[str, asyncio.Task] = {}
+
+       async def register_service(
+           self,
+           config: ServiceConfig
+       ) -> None:
+           await self._registry.register(
+               config.name,
+               config.url
+           )
+           self._health_tasks[config.name] = asyncio.create_task(
+               self._health_check(config)
+           )
+
+       async def _health_check(
+           self,
+           config: ServiceConfig
+       ) -> None:
+           while True:
+               try:
+                   async with aiohttp.ClientSession() as session:
+                       async with session.get(
+                           f"{config.url}/health",
+                           timeout=config.timeout
+                       ) as response:
+                           if response.status != 200:
+                               await self._handle_service_down(config)
+               except Exception as e:
+                   await self._handle_service_down(config)
+               await asyncio.sleep(config.health_check_interval)
+
+   # ❌ Bad
+   class BadService:
+       services = {}  # Global state
+       def add_service(self, name: str, url: str):
+           self.services[name] = url  # No health checks
+   ```
+
+3. **Event Handling**
+   - Implement event routing
+   - Handle event ordering
+   - Manage event persistence
+   - Support event replay
+   - Example:
+   ```python
+   # ✅ Good
+   from fastmcp import EventBus, Event
+   from typing import Any, Callable, List
+   from datetime import datetime
+   import asyncio
+
+   class EventStore:
+       def __init__(self):
+           self._events: List[Event] = []
+           self._handlers: dict[str, List[Callable]] = {}
+
+       async def publish(
+           self,
+           event_type: str,
+           data: Any,
+           metadata: dict[str, Any] | None = None
+       ) -> None:
+           event = Event(
+               type=event_type,
+               data=data,
+               metadata=metadata or {},
+               timestamp=datetime.utcnow()
+           )
+           await self._persist_event(event)
+           await self._process_event(event)
+
+       async def subscribe(
+           self,
+           event_type: str,
+           handler: Callable
+       ) -> None:
+           if event_type not in self._handlers:
+               self._handlers[event_type] = []
+           self._handlers[event_type].append(handler)
+
+       async def replay_events(
+           self,
+           event_type: str | None = None,
+           start_time: datetime | None = None
+       ) -> None:
+           events = self._filter_events(event_type, start_time)
+           for event in events:
+               await self._process_event(event)
+
+   # ❌ Bad
+   class BadEvents:
+       def emit(self, event: str):
+           print(f"Event: {event}")  # No proper handling
+   ```
+
+4. **Message Format Management**
+   - Define message schemas
+   - Handle message validation
+   - Support message versioning
+   - Implement message transformation
+   - Example:
+   ```python
+   # ✅ Good
+   from fastmcp import MessageSchema
+   from typing import Any, Optional
+   from pydantic import BaseModel, Field
+   import json
+
+   class MessageHeader(BaseModel):
+       version: str
+       message_id: str
+       timestamp: datetime
+       correlation_id: Optional[str] = None
+
+   class Message(BaseModel):
+       header: MessageHeader
+       payload: dict[str, Any]
+       schema_version: str = Field(regex=r"^\d+\.\d+\.\d+$")
+
+   class MessageProcessor:
+       def __init__(self):
+           self._schemas: dict[str, MessageSchema] = {}
+           self._transformers: dict[str, dict[str, Callable]] = {}
+
+       async def process_message(
+           self,
+           message: Message
+       ) -> Any:
+           # Validate schema version
+           schema = self._schemas.get(message.schema_version)
+           if not schema:
+               raise ValueError("Unknown schema version")
+
+           # Transform if needed
+           if message.schema_version != schema.latest_version:
+               message = await self._transform_message(
+                   message,
+                   schema.latest_version
+               )
+
+           # Validate and process
+           return await schema.validate_and_process(message)
+
+   # ❌ Bad
+   def process_message(data: dict):
+       return json.dumps(data)  # No validation/versioning
+   ```
+
+5. **Protocol Compatibility**
+   - Support multiple protocols
+   - Handle protocol negotiation
+   - Manage protocol upgrades
+   - Implement fallback mechanisms
+   - Example:
+   ```python
+   # ✅ Good
+   from fastmcp import Protocol, ProtocolVersion
+   from typing import List, Optional
+   from enum import Enum
+   import asyncio
+
+   class ProtocolType(Enum):
+       HTTP = "http"
+       WEBSOCKET = "websocket"
+       GRPC = "grpc"
+
+   class ProtocolManager:
+       def __init__(self):
+           self._protocols: dict[ProtocolType, Protocol] = {}
+           self._supported_versions: dict[
+               ProtocolType,
+               List[ProtocolVersion]
+           ] = {}
+
+       async def register_protocol(
+           self,
+           protocol_type: ProtocolType,
+           versions: List[ProtocolVersion]
+       ) -> None:
+           self._protocols[protocol_type] = Protocol(versions)
+           self._supported_versions[protocol_type] = versions
+
+       async def negotiate_protocol(
+           self,
+           client_protocols: List[tuple[ProtocolType, str]]
+       ) -> Optional[tuple[ProtocolType, ProtocolVersion]]:
+           for proto_type, version in client_protocols:
+               if proto_type not in self._protocols:
+                   continue
+
+               protocol = self._protocols[proto_type]
+               supported = await protocol.find_compatible_version(
+                   version
+               )
+               if supported:
+                   return proto_type, supported
+
+           return None
+
+   # ❌ Bad
+   class BadProtocol:
+       def handle(self, data: bytes):
+           return data  # No protocol handling
+   ```
+
+## Examples
+
+<example>
+# Complete Integration Implementation
+from fastmcp import FastMCP, ServiceRegistry, EventBus, Protocol
+from typing import Any, Optional
+import structlog
+import asyncio
+
+logger = structlog.get_logger()
+
+# Integration Configuration
+class IntegrationConfig(BaseModel):
+    service_registry_url: str
+    event_bus_url: str
+    supported_protocols: List[ProtocolType]
+    client_timeout: float = 30.0
+
+# Integration Manager
+class IntegrationManager:
+    def __init__(self, config: IntegrationConfig):
+        self._config = config
+        self._service_manager = ServiceManager()
+        self._event_store = EventStore()
+        self._message_processor = MessageProcessor()
+        self._protocol_manager = ProtocolManager()
+
+    async def setup(self) -> None:
+        # Initialize service registry
+        registry = ServiceRegistry(self._config.service_registry_url)
+        await registry.connect()
+
+        # Initialize event bus
+        event_bus = EventBus(self._config.event_bus_url)
+        await event_bus.connect()
+
+        # Register protocols
+        for protocol in self._config.supported_protocols:
+            versions = await self._get_protocol_versions(protocol)
+            await self._protocol_manager.register_protocol(
+                protocol,
+                versions
+            )
+
+    async def handle_client_connection(
+        self,
+        client_info: dict[str, Any]
+    ) -> None:
+        try:
+            # Negotiate protocol
+            protocol = await self._protocol_manager.negotiate_protocol(
+                client_info["protocols"]
+            )
+            if not protocol:
+                raise ValueError("No compatible protocol")
+
+            # Create client session
+            client = FastMCPClient(ClientConfig(
+                api_version=client_info["version"],
+                base_url=client_info["url"],
+                timeout=self._config.client_timeout
+            ))
+            await client.connect()
+
+            # Subscribe to events
+            for event_type in client_info["subscriptions"]:
+                await self._event_store.subscribe(
+                    event_type,
+                    lambda e: client.handle_event(e)
+                )
+
+            logger.info(
+                "client_connected",
+                client_id=client_info["id"],
+                protocol=protocol
+            )
+
+        except Exception as e:
+            logger.error(
+                "client_connection_failed",
+                error=str(e),
+                client_info=client_info
+            )
+            raise
+
+    async def handle_service_message(
+        self,
+        message: Message
+    ) -> Any:
+        try:
+            # Process message
+            result = await self._message_processor.process_message(
+                message
+            )
+
+            # Publish event if needed
+            if message.header.correlation_id:
+                await self._event_store.publish(
+                    "message_processed",
+                    {
+                        "correlation_id": message.header.correlation_id,
+                        "result": result
+                    }
+                )
+
+            return result
+
+        except Exception as e:
+            logger.error(
+                "message_processing_failed",
+                error=str(e),
+                message_id=message.header.message_id
+            )
+            raise
+
+# FastMCP Application
+app = FastMCP()
+config = IntegrationConfig(
+    service_registry_url="http://registry:8000",
+    event_bus_url="http://events:8001",
+    supported_protocols=[
+        ProtocolType.HTTP,
+        ProtocolType.WEBSOCKET
+    ]
+)
+integration = IntegrationManager(config)
+
+@app.on_startup
+async def startup():
+    await integration.setup()
+
+@app.post("/connect")
+async def connect_client(request: Request):
+    client_info = await request.json()
+    await integration.handle_client_connection(client_info)
+    return {"status": "connected"}
+
+@app.post("/message")
+async def handle_message(request: Request):
+    message = Message(**await request.json())
+    result = await integration.handle_service_message(message)
+    return {"status": "processed", "result": result}
+</example>
+
+<example type="invalid">
+# Bad Integration Implementation
+class BadIntegration:
+    def __init__(self):
+        self.clients = []  # No proper client management
+        self.events = []  # No proper event handling
+
+    def add_client(self, client: dict):
+        self.clients.append(client)  # No validation
+        print(f"Client added: {client}")  # Poor logging
+
+    def send_message(self, message: dict):
+        for client in self.clients:
+            try:
+                client.send(message)  # No protocol handling
+            except:
+                pass  # Silent failure
+
+    def handle_event(self, event: str):
+        self.events.append(event)  # No processing
+        print(f"Event: {event}")  # Poor logging
+
+app = FastMCP()
+integration = BadIntegration()
+
+@app.post("/connect")
+def bad_connect(request: Request):
+    integration.add_client(request.json())
+    return "ok"  # No proper response
+
+@app.post("/message")
+def bad_message(request: Request):
+    integration.send_message(request.json())
+    return "sent"  # No error handling
+</example>

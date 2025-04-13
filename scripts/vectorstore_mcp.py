@@ -3,7 +3,9 @@
 import argparse
 import glob
 import json
+import os
 from pathlib import Path
+from typing import Any, Dict, List
 
 from langchain_community.vectorstores import SKLearnVectorStore
 from langchain_openai import OpenAIEmbeddings
@@ -21,6 +23,10 @@ parser.add_argument('--dry-run', action='store_true',
                   help='Show configuration without starting the server')
 parser.add_argument('--list-vectorstores', action='store_true',
                   help='List available vector stores (searches for .parquet files)')
+parser.add_argument('--generate-mcp-config', action='store_true',
+                  help='Generate mcp.json configuration for all modules')
+parser.add_argument('--save', action='store_true',
+                  help='Save the generated mcp.json configuration to disk')
 
 args = parser.parse_args()
 
@@ -49,14 +55,14 @@ def list_vectorstores():
     print("\n=== Available Vector Stores ===\n")
 
     # Find all .parquet files recursively
-    parquet_files = list(DOCS_PATH.glob("**/*.parquet"))
+    parquet_files: list[Path] = list(DOCS_PATH.glob("**/*.parquet"))
 
     if not parquet_files:
         print("No vector stores found.")
         return
 
     # Group by module
-    stores_by_module = {}
+    stores_by_module: dict[str, list[Path]] = {}
     for file in parquet_files:
         module_name = file.parent.parent.name
         if module_name not in stores_by_module:
@@ -71,6 +77,43 @@ def list_vectorstores():
         print()
 
     print(f"Total vector stores found: {len(parquet_files)}")
+
+def generate_mcp_config() -> dict[str, dict[str, Any]]:
+    """Generate mcp.json configuration for all modules"""
+    modules = ['discord', 'dpytest', 'langgraph']
+
+    # Get the script path relative to BASE_PATH
+    script_path = os.path.abspath(__file__)
+    relative_script_path = os.path.relpath(script_path, BASE_PATH)
+
+    mcp_config: dict[str, dict[str, Any]] = {
+        "mcpServers": {}
+    }
+
+    for module in modules:
+        server_name = f"{module}-docs-mcp-server".lower()
+        mcp_config["mcpServers"][server_name] = {
+            "command": "uv",
+            "args": [
+                "run",
+                "--directory", str(BASE_PATH),
+                f"./{relative_script_path}",
+                "--module", module
+            ]
+        }
+
+    # Print the generated config
+    print("\n=== Generated MCP Configuration ===\n")
+    print(json.dumps(mcp_config, indent=2))
+
+    return mcp_config
+
+def save_mcp_config(config: dict[str, dict[str, Any]]) -> None:
+    """Save the MCP configuration to disk"""
+    save_path = BASE_PATH / "mcp.json"
+    with open(save_path, 'w') as f:
+        json.dump(config, indent=2, fp=f)
+    print(f"\nConfiguration saved to {save_path}")
 
 # Create an MCP server with module name
 mcp = FastMCP(f"{args.module}-docs-mcp-server".lower())
@@ -127,6 +170,10 @@ def get_all_docs(module: str) -> str:
 if __name__ == "__main__":
     if args.list_vectorstores:
         list_vectorstores()
+    elif args.generate_mcp_config:
+        config = generate_mcp_config()
+        if args.save:
+            save_mcp_config(config)
     elif args.dry_run:
         config = get_config_info()
         print("\n=== MCP Server Configuration ===\n")

@@ -1,0 +1,195 @@
+---
+description: This rule governs the implementation and management of FastMCP resources. It should be applied whenever: (1) Creating new resources, (2) Implementing resource templates, (3) Managing resource lifecycles, (4) Handling resource errors, or (5) Optimizing resource performance. The rule ensures consistent resource implementation, proper error handling, and efficient resource management across all FastMCP server implementations.
+globs:
+alwaysApply: false
+---
+
+# FastMCP Resource Management Rules
+
+## Critical Rules
+
+1. **Resource Type Selection**
+   - Choose appropriate resource type based on data characteristics:
+     - `TextResource` for string content
+     - `BinaryResource` for raw bytes
+     - `FileResource` for file system access
+     - `HttpResource` for HTTP endpoints
+     - `DirectoryResource` for directory listings
+     - `FunctionResource` for lazy-loaded or computed data
+   - Example:
+   ```python
+   # ✅ Good
+   # Text content
+   text_resource = TextResource(
+       uri="resource://text/hello",
+       text="Hello, World!",
+       mime_type="text/plain"
+   )
+
+   # Binary data
+   binary_resource = BinaryResource(
+       uri="resource://binary/data",
+       data=bytes([1, 2, 3]),
+       mime_type="application/octet-stream"
+   )
+
+   # ❌ Bad
+   # Don't use TextResource for binary data
+   text_resource = TextResource(
+       uri="resource://binary/wrong",
+       text=binary_data.decode('utf-8', errors='ignore')  # Data corruption risk
+   )
+   ```
+
+2. **Resource URI Patterns**
+   - Use descriptive, hierarchical URIs
+   - Include version in URI if needed
+   - Use consistent naming conventions
+   - Implement proper URI validation
+   - Example:
+   ```python
+   # ✅ Good
+   app.add_resource(FileResource(
+       uri="resource://data/v1/users/config.json",
+       path=Path("/path/to/config.json"),
+       mime_type="application/json"
+   ))
+
+   # ❌ Bad
+   app.add_resource(FileResource(
+       uri="resource://file1",  # Non-descriptive, flat URI
+       path=Path("config.json")  # Relative path
+   ))
+   ```
+
+3. **Resource Template Implementation**
+   - Use templates for dynamic resource generation
+   - Implement proper parameter validation
+   - Handle template matching errors gracefully
+   - Cache template results when appropriate
+   - Example:
+   ```python
+   # ✅ Good
+   @app.resource("resource://users/{user_id}/profile")
+   async def get_user_profile(user_id: str) -> dict:
+       try:
+           return await db.get_user(user_id)
+       except UserNotFound:
+           raise ValueError(f"User {user_id} not found")
+
+   # ❌ Bad
+   @app.resource("resource://users/*/profile")  # Avoid wildcards
+   def get_profile(path: str):  # Missing type hints
+       return db.get_user(path.split("/")[2])  # Brittle path handling
+   ```
+
+4. **Resource Error Handling**
+   - Implement comprehensive error handling
+   - Provide clear error messages
+   - Handle resource not found scenarios
+   - Manage resource timeouts
+   - Example:
+   ```python
+   # ✅ Good
+   async def read(self) -> str:
+       try:
+           async with timeout(10):  # Prevent infinite waits
+               data = await self._fetch_data()
+               return json.dumps(data)
+       except TimeoutError:
+           raise ValueError("Resource fetch timed out")
+       except ValueError as e:
+           raise ValueError(f"Invalid data format: {e}")
+       except Exception as e:
+           raise ValueError(f"Error reading resource: {e}")
+
+   # ❌ Bad
+   async def read(self) -> str:
+       return await self._fetch_data()  # No error handling
+   ```
+
+5. **Resource Performance Optimization**
+   - Implement lazy loading for expensive resources
+   - Use appropriate caching strategies
+   - Handle resource cleanup properly
+   - Monitor resource usage
+   - Example:
+   ```python
+   # ✅ Good
+   @app.resource("resource://data/expensive")
+   async def get_expensive_data() -> FunctionResource:
+       return FunctionResource(
+           uri="resource://data/expensive",
+           fn=lambda: expensive_computation(),
+           mime_type="application/json"
+       )
+
+   # ❌ Bad
+   @app.resource("resource://data/expensive")
+   def get_expensive_data() -> dict:
+       return expensive_computation()  # Blocks on resource registration
+   ```
+
+## Examples
+
+<example>
+# Complete Resource Management Implementation
+from fastmcp import FastMCP
+from pathlib import Path
+
+app = FastMCP(name="ResourceDemo")
+
+# Static resources
+app.add_resource(TextResource(
+    uri="resource://static/welcome",
+    text="Welcome to the service",
+    mime_type="text/plain"
+))
+
+# File resources with proper error handling
+@app.resource("resource://files/{filename}")
+async def serve_file(filename: str) -> FileResource:
+    path = Path("/data/files") / filename
+    if not path.exists():
+        raise ValueError(f"File not found: {filename}")
+    if not path.is_file():
+        raise ValueError(f"Not a file: {filename}")
+    return FileResource(
+        uri=f"resource://files/{filename}",
+        path=path,
+        mime_type="application/octet-stream"
+    )
+
+# Lazy-loaded expensive resources
+@app.resource("resource://computed/{param}")
+async def compute_resource(param: str) -> FunctionResource:
+    async def compute():
+        result = await expensive_computation(param)
+        return json.dumps(result)
+
+    return FunctionResource(
+        uri=f"resource://computed/{param}",
+        fn=compute,
+        mime_type="application/json"
+    )
+</example>
+
+<example type="invalid">
+# DON'T: Poor Resource Management
+# Missing error handling
+@app.resource("resource://unsafe/{id}")
+def unsafe_resource(id: str):
+    return open(f"/data/{id}").read()  # File handle leak, no error handling
+
+# DON'T: Inefficient resource loading
+@app.resource("resource://inefficient")
+def inefficient_resource():
+    # Loads all data immediately, blocks server startup
+    return load_entire_database()
+
+# DON'T: Insecure resource access
+@app.resource("resource://files/{path:path}")
+def insecure_file(path: str):
+    # Path traversal vulnerability
+    return FileResource(path=f"/data/{path}")
+</example>
