@@ -1,0 +1,117 @@
+---
+description: ""
+globs: "*.py"
+alwaysApply: false
+---
+
+# Python Linter Directives Management
+
+## Critical Rules
+
+- ALWAYS scan Python files for specific module imports:
+  * discord.py: Look for `import discord` or `from discord`
+  * pydantic: Look for `import pydantic` or `from pydantic`
+
+- Apply directives based on detected imports:
+  * For discord.py files:
+    ```python
+    # pylint: disable=no-member
+    # pyright: reportAttributeAccessIssue=false
+    ```
+
+  * For pydantic files:
+    ```python
+    # pylint: disable=no-name-in-module
+    # pylint: disable=no-member
+    # pyright: reportInvalidTypeForm=false
+    # pyright: reportUndefinedVariable=false
+    ```
+
+  * For files using both:
+    ```python
+    # pylint: disable=no-name-in-module
+    # pylint: disable=no-member
+    # pyright: reportInvalidTypeForm=false
+    # pyright: reportUndefinedVariable=false
+    # pyright: reportAttributeAccessIssue=false
+    ```
+
+- Directive Placement Rules:
+  * Place directives at the top of file before any imports
+  * Keep existing linter directives when adding new ones
+  * Add directives on separate lines, never inline
+  * Add explanatory comments for complex directive combinations
+
+- When modifying directives:
+  * Scan entire file first to identify all imports
+  * Preserve any existing custom directives
+  * Add new directives after existing ones
+  * Group similar directives together (pylint, pyright)
+
+## Examples
+
+<example>
+# Good - File using both Discord.py and Pydantic
+```python
+# pylint: disable=no-name-in-module
+# pylint: disable=no-member
+# pyright: reportInvalidTypeForm=false
+# pyright: reportUndefinedVariable=false
+# pyright: reportAttributeAccessIssue=false
+
+from __future__ import annotations
+
+import asyncio
+from typing import Optional
+
+import discord
+from discord.ext import commands
+from pydantic import BaseModel, Field
+
+class MySettings(BaseModel):
+    """Example settings class."""
+    guild_id: int = Field(..., description="Discord guild ID")
+    prefix: str = Field("!", description="Command prefix")
+```
+
+# Good - File using only Discord.py
+```python
+# pylint: disable=no-member
+# pyright: reportAttributeAccessIssue=false
+
+import discord
+from discord.ext import commands
+
+class MyCog(commands.Cog):
+    """Example cog."""
+    def __init__(self, bot):
+        self.bot = bot
+```
+</example>
+
+<example type="invalid">
+# Bad - Incorrect directive placement
+```python
+import discord
+from discord.ext import commands
+
+# pylint: disable=no-member  # Wrong placement - should be at top
+# pyright: reportAttributeAccessIssue=false  # Wrong placement
+
+class MyCog(commands.Cog):
+    pass
+```
+
+# Bad - Missing required directives
+```python
+from pydantic import BaseModel
+
+class MySettings(BaseModel):  # Will cause linter errors without proper directives
+    pass
+```
+
+# Bad - Inline directives
+```python
+from pydantic import BaseModel  # pylint: disable=no-name-in-module  # Don't use inline
+```
+</example>

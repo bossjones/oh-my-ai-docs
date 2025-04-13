@@ -1,11 +1,11 @@
 # vectorstore mcp server targets
 [group('vectorstore')]
 vectorstore-discord:
-    uv run ./scripts/vectorstore_mcp.py --module discord
+    uv run ./scripts/vectorstore_mcp.py --module discord --stdio
 
 [group('vectorstore')]
 vectorstore-discord-inspector:
-    npx -y @modelcontextprotocol/inspector@0.8.2 uv run ./scripts/vectorstore_mcp.py --module discord
+    npx -y @modelcontextprotocol/inspector@0.8.2 uv run ./scripts/vectorstore_mcp.py --module discord --stdio
 
 [group('vectorstore')]
 vectorstore-discord-dry-run:
@@ -17,7 +17,7 @@ vectorstore-discord-dry-run-inspector:
 
 [group('vectorstore')]
 vectorstore-langgraph:
-    uv run ./scripts/vectorstore_mcp.py --module langgraph
+    uv run ./scripts/vectorstore_mcp.py --module langgraph --stdio --debug
 
 [group('vectorstore')]
 vectorstore-langgraph-inspector:
@@ -25,7 +25,7 @@ vectorstore-langgraph-inspector:
 
 [group('vectorstore')]
 vectorstore-langgraph-dry-run:
-    uv run ./scripts/vectorstore_mcp.py --module langgraph --dry-run
+    uv run ./scripts/vectorstore_mcp.py --module langgraph --dry-run --stdio --debug
 
 [group('vectorstore')]
 vectorstore-langgraph-dry-run-inspector:
@@ -33,7 +33,7 @@ vectorstore-langgraph-dry-run-inspector:
 
 [group('vectorstore')]
 vectorstore-langchain:
-    uv run ./scripts/vectorstore_mcp.py --module langchain
+    uv run ./scripts/vectorstore_mcp.py --module langchain --stdio --debug
 
 [group('vectorstore')]
 vectorstore-langchain-inspector:
@@ -41,7 +41,7 @@ vectorstore-langchain-inspector:
 
 [group('vectorstore')]
 vectorstore-langchain-dry-run:
-    uv run ./scripts/vectorstore_mcp.py --module langchain --dry-run
+    uv run ./scripts/vectorstore_mcp.py --module langchain --dry-run --stdio --debug
 
 [group('vectorstore')]
 vectorstore-langchain-dry-run-inspector:
@@ -49,7 +49,7 @@ vectorstore-langchain-dry-run-inspector:
 
 [group('vectorstore')]
 vectorstore-dpytest:
-    uv run ./scripts/vectorstore_mcp.py --module dpytest
+    uv run ./scripts/vectorstore_mcp.py --module dpytest --stdio --debug
 
 [group('vectorstore')]
 vectorstore-dpytest-inspector:
@@ -57,7 +57,7 @@ vectorstore-dpytest-inspector:
 
 [group('vectorstore')]
 vectorstore-dpytest-dry-run:
-    uv run ./scripts/vectorstore_mcp.py --module dpytest --dry-run
+    uv run ./scripts/vectorstore_mcp.py --module dpytest --dry-run --stdio --debug
 
 [group('vectorstore')]
 vectorstore-dpytest-dry-run-inspector:

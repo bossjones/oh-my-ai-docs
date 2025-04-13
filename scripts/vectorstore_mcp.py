@@ -147,11 +147,35 @@ def save_mcp_config(config: dict[str, dict[str, Any]]) -> None:
         json.dump(config, indent=2, fp=f)
     safe_print(f"\nConfiguration saved to {save_path}")
 
+
+@contextmanager
+def vectorstore_session(vectorstore_path: str) -> Generator[dict[str, SKLearnVectorStore], None, None]:
+    """Context manager for vectorstore operations.
+
+    Args:
+        vectorstore_path (str): Path to the vectorstore file
+
+    Yields:
+        dict[str, SKLearnVectorStore]: A dictionary containing the vectorstore instance with 'store' key
+    """
+    try:
+        store = SKLearnVectorStore(
+            embedding=OpenAIEmbeddings(model="text-embedding-3-large"),
+            persist_path=str(vectorstore_path),
+            serializer="parquet"
+        )
+        yield {"store": store}
+    finally:
+        # Cleanup if needed
+        pass
+
 # Create an MCP server with module name
-mcp = FastMCP(
+mcp: FastMCP = FastMCP(
     f"{args.module}-docs-mcp-server".lower(),
     debug=args.debug,
-    log_level="DEBUG" if args.debug else "INFO"
+    log_level="DEBUG" if args.debug else "INFO",
+    transport='stdio',  # Set transport at initialization,
+    lifespan=vectorstore_session
 )
 
 
@@ -180,26 +204,6 @@ class DocumentResponse(BaseModel):
     scores: list[float]
     total_found: int
 
-@contextmanager
-def vectorstore_session(vectorstore_path: str) -> Generator[SKLearnVectorStore, None, None]:
-    """Context manager for vectorstore operations.
-
-    Args:
-        vectorstore_path (str): Path to the vectorstore file
-
-    Yields:
-        SKLearnVectorStore: An instance of SKLearnVectorStore for querying embeddings
-    """
-    try:
-        store = SKLearnVectorStore(
-            embedding=OpenAIEmbeddings(model="text-embedding-3-large"),
-            persist_path=str(vectorstore_path),
-            serializer="parquet"
-        )
-        yield store
-    finally:
-        # Cleanup if needed
-        pass
 
 # Add a tool to query the documentation
 @mcp.tool(
@@ -237,12 +241,15 @@ def query_tool(
     config = config or QueryConfig()
     vectorstore_path = DOCS_PATH / args.module / "vectorstore" / f"{args.module}_vectorstore.parquet"
 
+    _ctx = mcp.get_context()
+
+
     try:
         with vectorstore_session(str(vectorstore_path)) as store:
             if not args.stdio:
                 ctx.info(f"Querying vectorstore with k={config.k}")
 
-            retriever = store.as_retriever(
+            retriever = store["store"].as_retriever(
                 search_kwargs={"k": config.k}
             )
 
@@ -277,50 +284,52 @@ def query_tool(
 
 
 
-@mcp.resource(
-    uri="docs://{module}/full",
-    name="module_documentation",
-    description="Retrieves the full documentation content for a specified module (discord, dpytest, or langgraph). Returns the raw text content from the module's documentation file.",
-    mime_type="text/plain",
-)
-def get_all_docs(module: str) -> str:
-    """
-    Get all the documentation for the specified module. Returns the contents of the {module}_docs.txt file,
-    which contains a curated set of documentation. This is useful for a comprehensive response to questions.
+# @mcp.resource(
+#     uri="docs://{module}/full",
+#     name="module_documentation",
+#     description="Retrieves the full documentation content for a specified module (discord, dpytest, or langgraph). Returns the raw text content from the module's documentation file.",
+#     mime_type="text/plain",
+# )
+# def get_all_docs(module: str) -> str:
+#     """
+#     Get all the documentation for the specified module. Returns the contents of the {module}_docs.txt file,
+#     which contains a curated set of documentation. This is useful for a comprehensive response to questions.
 
-    Args:
-        module (str): The module name (discord, dpytest, or langgraph)
+#     Args:
+#         module (str): The module name (discord, dpytest, or langgraph)
 
-    Returns:
-        str: The contents of the module's documentation
+#     Returns:
+#         str: The contents of the module's documentation
 
-    Raises:
-        ResourceError: If the module doesn't match or if there's an error reading the documentation
-    """
-    try:
-        if module != args.module:
-            raise ResourceError(f"Requested module '{module}' does not match server module '{args.module}'")
+#     Raises:
+#         ResourceError: If the module doesn't match or if there's an error reading the documentation
+#     """
+#     try:
+#         if module != args.module:
+#             raise ResourceError(f"Requested module '{module}' does not match server module '{args.module}'")
 
-        # Local path to the documentation
-        doc_path = DOCS_PATH / module / f"{module}_docs.txt"
+#         # Local path to the documentation
+#         doc_path = DOCS_PATH / module / f"{module}_docs.txt"
 
-        if not doc_path.exists():
-            raise ResourceError(f"Documentation file not found for module: {module}")
+#         if not doc_path.exists():
+#             raise ResourceError(f"Documentation file not found for module: {module}")
 
-        with open(doc_path) as file:
-            content = file.read()
-            return content
+#         with open(doc_path) as file:
+#             content = file.read()
+#             return content
 
-    except ResourceError:
-        raise
-    except Exception as e:
-        raise ResourceError(f"Error reading documentation file: {e}")
+#     except ResourceError:
+#         raise
+#     except Exception as e:
+#         raise ResourceError(f"Error reading documentation file: {e}")
 
 if __name__ == "__main__":
-    # If --stdio is enabled, redirect stdout and stderr to devnull
+    # Properly handle stdio redirection
     # if args.stdio:
-    #     sys.stdout = open(os.devnull, 'w')
-    #     sys.stderr = open(os.devnull, 'w')
+    #     # Ensure we're not interfering with MCP communication
+    #     if not args.debug:
+    #         sys.stdout = open(os.devnull, 'w')
+    #         sys.stderr = open(os.devnull, 'w')
 
     if args.list_vectorstores:
         list_vectorstores()
@@ -335,5 +344,11 @@ if __name__ == "__main__":
         safe_print("\nDry run completed. Use without --dry-run to start the server.")
     else:
         # Initialize and run the server
-        safe_print(f"Starting MCP server for {args.module} documentation...")
-        mcp.run(transport='stdio')
+        if not args.stdio:
+            safe_print(f"Starting MCP server for {args.module} documentation...")
+        try:
+            mcp.run()  # Remove transport parameter since it's set at initialization
+        except Exception as e:
+            if not args.stdio:
+                safe_print(f"Error starting server: {e}", file=sys.stderr)
+            sys.exit(1)

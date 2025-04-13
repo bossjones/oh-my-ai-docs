@@ -119,49 +119,11 @@
             }
         },
         {
-            "name": "UV Debug Slack Agent app.py",
-            "type": "debugpy",
-            "request": "launch",
-            "module": "app.app",
-            "jinja": true,
-            "justMyCode": false,
-            "env": {
-                "DYNAMODB_ENDPOINT_URL": "http://localhost:8000",
-                "ENVIRONMENT_NAME": "local",
-                "REGION_NAME": "local",
-                "PYTHONPATH": "${workspaceFolder}"
-            },
-            "envFile": "${workspaceFolder}/.env",
-            "python": "${workspaceFolder}/.venv/bin/python"
-        },
-        {
-            "name": "UV Debug Vectorstore MCP Discord",
+            "name": "UV RUN Vectorstore MCP Discord",
             "type": "debugpy",
             "request": "launch",
             "program": "${workspaceFolder}/scripts/vectorstore_mcp.py",
             "args": [
-                "--module",
-                "discord"
-            ],
-            "jinja": true,
-            "justMyCode": false,
-            "env": {
-                "PYTHONPATH": "${workspaceFolder}"
-            },
-            "envFile": "${workspaceFolder}/.env",
-            "python": "${workspaceFolder}/.venv/bin/python"
-        },
-        {
-            "name": "UV Debug MCP Inspector Discord",
-            "type": "debugpy",
-            "request": "launch",
-            "module": "npx",
-            "args": [
-                "-y",
-                "@modelcontextprotocol/inspector",
-                "uv",
-                "run",
-                "./scripts/vectorstore_mcp.py",
                 "--module",
                 "discord",
                 "--stdio",
@@ -174,6 +136,59 @@
             },
             "envFile": "${workspaceFolder}/.env",
             "python": "${workspaceFolder}/.venv/bin/python"
-        }
+        },
+        {
+            "name": "UV RUN Async Vectorstore MCP Discord",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${workspaceFolder}/src/oh_my_ai_docs/avectorstore_mcp.py",
+            "args": [
+                "--module",
+                "discord",
+                "--stdio",
+                "--debug"
+            ],
+            "jinja": true,
+            "justMyCode": false,
+            "env": {
+                "PYTHONPATH": "${workspaceFolder}"
+            },
+            "envFile": "${workspaceFolder}/.env",
+            "python": "${workspaceFolder}/.venv/bin/python"
+        },
+        {
+            "type": "node",
+            "request": "launch",
+            "name": "Run Inspector with npx on vectorstore_mcp.py",
+            "runtimeExecutable": "npx",
+            "args": [
+                "-y",
+                "@modelcontextprotocol/inspector",
+                "uv",
+                "run",
+                "${workspaceFolder}/scripts/vectorstore_mcp.py",
+                "--module",
+                "discord",
+                "--stdio",
+                "--debug"
+            ],
+            "console": "integratedTerminal",
+            "internalConsoleOptions": "neverOpen"
+        },
+        // {
+        //     "name": "UV Debug MCP Inspector Discord",
+        //     "type": "debugpy",
+        //     "request": "launch",
+        //     "program": "${workspaceFolder}/scripts/run_mcp_inspector.sh",
+        //     "console": "integratedTerminal",
+        //     "jinja": true,
+        //     "justMyCode": false,
+        //     "env": {
+        //         "PYTHONPATH": "${workspaceFolder}",
+        //         "PATH": "${env:PATH}:${workspaceFolder}/.venv/bin"
+        //     },
+        //     "envFile": "${workspaceFolder}/.env",
+        //     "python": "${workspaceFolder}/.venv/bin/python"
+        // }
     ]
 }

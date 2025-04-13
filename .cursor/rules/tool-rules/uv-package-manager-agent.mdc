@@ -1,0 +1,180 @@
+---
+description: "This rule governs the usage of UV package manager in the project. It should be applied whenever: (1) Installing or managing Python packages, (2) Setting up Python environments, (3) Running Python code or tests, or (4) Modifying dependency files. This rule ensures consistent package management and environment setup across the project."
+globs:
+alwaysApply: true
+---
+
+# UV Package Manager Standards
+
+## Critical Rules
+
+- ALWAYS check command syntax with `uv <command> --help` when in doubt
+  * UV commands and options change frequently
+  * Help documentation is the most reliable source
+  * Different UV versions may support different commands
+
+- NEVER modify pyproject.toml's [tool.uv] section except for:
+  * sources = for specifying package sources
+  * workspace = for workspace configuration
+  * NO other fields are supported by UV in pyproject.toml
+
+- NEVER attempt to add custom UV configuration like:
+  * scripts (UV doesn't support custom scripts in pyproject.toml)
+  * venv settings
+  * requirements path
+  * editable mode
+  * Any other custom configuration
+
+- ALWAYS use proper UV commands:
+  * `uv add {package}` for installing single packages (NOT `uv install`)
+  * `uv sync` for installing all dependencies from pyproject.toml
+  * `uv sync --dev` for installing with development dependencies
+  * `uv remove {package}` for removing packages
+  * `uv sync --upgrade-package {package}` for upgrading specific packages
+  * `uv lock --upgrade` for upgrading all packages
+
+- For running Python scripts/tests:
+  * Use `uv run python` instead of just `python`
+  * Use `uv run pytest` instead of just `pytest`
+  * Use `uv run` for any other Python-based commands
+
+- When installing packages:
+  * ALWAYS use `uv add {package}` for single package
+  * ALWAYS use `uv sync` for installing all dependencies
+  * NEVER install packages without version pins in production
+
+- For development workflows:
+  * Use `uv sync --dev` to install development dependencies
+  * UV will automatically maintain a lockfile (uv.lock) for reproducible builds
+
+- ALWAYS specify package versions in pyproject.toml
+- NEVER mix different package managers in the same project
+
+## Examples
+
+<example>
+# Good - Proper UV Usage
+```toml
+# pyproject.toml
+[tool.uv.sources]
+cursor-rules-mcp-server = { workspace = true }
+pytest-freezegun = { git = "https://github.com/bossjones/pytest-freezegun" }
+
+[project]
+dependencies = [
+    "pytest==8.0.0",
+    "discord.py==2.3.2",
+    "loguru==0.7.2"
+]
+
+[project.optional-dependencies]
+dev = [
+    "black==24.2.0",
+    "mypy==1.8.0",
+    "ruff==0.3.0"
+]
+```
+
+# Good - Command Usage
+```bash
+# Installing dependencies
+uv add pytest==8.0.0  # Add single package
+uv sync  # Install all dependencies
+uv sync --dev  # Install with dev dependencies
+
+# Running commands
+uv run pytest tests/
+uv run python -m pytest
+uv run python script.py
+
+# Upgrading packages
+uv sync --upgrade-package pytest
+uv lock --upgrade  # Upgrade all packages
+```
+</example>
+
+<example type="invalid">
+# Bad - Invalid UV Configuration
+```toml
+# NEVER do this in pyproject.toml
+[tool.uv]
+venv = { path = ".venv" }  # Not supported
+requirements = { path = "requirements.txt" }  # Not supported
+editable = true  # Not supported
+
+[tool.uv.scripts]  # Scripts are not supported
+test = "pytest tests/ -v"
+lint = "ruff check ."
+```
+
+# Bad - Incorrect UV Usage
+```bash
+# NEVER do these
+uv install pytest  # Wrong command - use 'uv add' instead
+uv pip install pytest  # Wrong command
+python -m pytest  # Use 'uv run pytest' instead
+pip freeze > requirements.txt  # Wrong package manager
+
+# NEVER mix package managers
+poetry install
+pip install -r requirements.txt
+```
+</example>
+
+## Implementation Guide
+
+1. Package Installation:
+   ```bash
+   # Check command help
+   uv add --help
+
+   # Install single package
+   uv add package==version
+
+   # Install all dependencies
+   uv sync
+
+   # Install with dev dependencies
+   uv sync --dev
+   ```
+
+2. Running Commands:
+   ```bash
+   # Check command help
+   uv run --help
+
+   # Run Python script
+   uv run python script.py
+
+   # Run tests
+   uv run pytest tests/
+
+   # Run any Python package
+   uv run package-name
+   ```
+
+3. Dependency Management:
+   ```toml
+   # In pyproject.toml
+   [project]
+   dependencies = [
+       "package==version"
+   ]
+
+   [project.optional-dependencies]
+   dev = [
+       "dev-package==version"
+   ]
+   ```
+
+4. Package Upgrades:
+   ```bash
+   # Check command help
+   uv sync --help
+
+   # Upgrade specific package
+   uv sync --upgrade-package package_name
+
+   # Upgrade all packages
+   uv lock --upgrade
+   ```

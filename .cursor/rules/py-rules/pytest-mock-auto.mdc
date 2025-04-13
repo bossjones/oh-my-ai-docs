@@ -1,0 +1,89 @@
+---
+description: ""
+globs: tests/**/*.py
+alwaysApply: false
+---
+
+# Python Test Mocking Standards
+
+## Critical Rules
+
+- NEVER import from unittest.mock
+- ALWAYS use pytest-mock's mocker fixture
+- ALWAYS add mocker as a parameter to test functions that need mocking
+- ALWAYS use mocker.patch instead of unittest.mock.patch
+- ALWAYS use mocker.Mock() instead of unittest.mock.Mock
+- ALWAYS use autospec=True when patching classes or complex objects
+- ALWAYS use mocker.patch.object() for clearer intent when patching object methods
+- ALWAYS use spy = mocker.spy(obj, 'method') for spying on methods
+- NEVER use patch as a decorator
+- NEVER use patch at module level
+- ALWAYS reset mocks in fixture teardown if used in fixtures
+
+## Examples
+
+<example>
+# Good - Using pytest-mock properly
+```python
+def test_download_command(mocker):
+    """Test the download command."""
+    # Create mocks using mocker
+    bot = mocker.Mock()
+    ctx = mocker.Mock()
+
+    # Use patch.object for clear intent
+    mocker.patch.object(bot.download_manager, 'validate_url',
+                       return_value=True, autospec=True)
+
+    # Use AsyncMock for coroutines
+    mocker.patch.object(bot.queue_manager, 'add_to_queue',
+                       side_effect=AsyncMock(), autospec=True)
+
+    # Create spy
+    spy = mocker.spy(ctx, 'send')
+
+    # Run test
+    await cog.download(ctx, "https://example.com/video.mp4")
+    assert spy.call_count == 1
+```
+
+# Good - Using fixtures with mocks
+```python
+@pytest.fixture
+def mock_bot(mocker):
+    """Create a mocked bot instance."""
+    bot = mocker.Mock()
+    # Add required mocked attributes
+    bot.download_manager = mocker.Mock()
+    bot.queue_manager = mocker.Mock()
+    return bot
+
+def test_cog_initialization(mock_bot):
+    """Test cog initialization with mocked bot."""
+    cog = DownloadsCog(mock_bot)
+    assert cog.bot == mock_bot
+```
+</example>
+
+<example type="invalid">
+# Bad - Using unittest.mock directly
+```python
+from unittest.mock import Mock, patch  # WRONG
+
+@patch('bot.download_manager')  # WRONG: Don't use decorator
+def test_download_command(mock_manager):
+    bot = Mock()  # WRONG: Use mocker.Mock()
+    ctx = Mock()  # WRONG: Use mocker.Mock()
+```
+
+# Bad - Module level mocking
+```python
+# WRONG: Don't mock at module level
+mock_bot = Mock()
+mock_ctx = Mock()
+
+def test_download():
+    # Using module level mocks is bad
+    result = cog.download(mock_ctx, "url")
+```
+</example>

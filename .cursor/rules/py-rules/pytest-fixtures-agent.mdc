@@ -1,0 +1,161 @@
+---
+description: "This rule governs pytest fixture management and organization. It should be applied whenever: (1) Creating new test files or fixtures, (2) Modifying existing fixtures, (3) Using fixtures in tests, or (4) Reviewing test code. This ensures consistent fixture management, prevents duplication, and maintains clear test organization."
+globs: tests/**/*.py
+alwaysApply: false
+---
+
+# Pytest Fixture Management Standards
+
+## Critical Rules
+
+- ALWAYS define shared fixtures in the appropriate conftest.py:
+  * Root `tests/conftest.py` for project-wide fixtures
+  * Package-level `tests/package_name/conftest.py` for package-specific fixtures
+  * Only create fixtures in test files if they are TRULY specific to that file
+
+- NEVER duplicate fixtures across test files:
+  * If you need a fixture that exists in another file, move it to conftest.py
+  * If you find duplicate fixtures, consolidate them in conftest.py
+  * Document fixture sources with comments when using shared fixtures
+
+- ALWAYS specify fixture scope explicitly:
+  * Use `scope="function"` for isolated test fixtures (default)
+  * Use `scope="class"` for class-level shared resources
+  * Use `scope="module"` for module-level shared resources
+  * Use `scope="package"` for package-level shared resources
+  * Use `scope="session"` for test session-wide resources
+
+- ALWAYS provide comprehensive fixture documentation:
+  * Describe the fixture's purpose
+  * Document the scope and why it was chosen
+  * List arguments and their types
+  * Specify return/yield type
+  * Document any side effects or cleanup
+
+- ALWAYS organize fixtures by category in conftest.py:
+  * Use clear section comments (e.g., "# --- Core Fixtures ---")
+  * Group related fixtures together
+  * Order from most general to most specific
+
+- ALWAYS use type hints in fixture definitions:
+  * Specify return types for synchronous fixtures
+  * Use AsyncGenerator for async fixtures
+  * Include None in generator return types
+  * Use proper typing for fixture parameters
+
+- ALWAYS clean up resources in fixtures:
+  * Use yield fixtures for cleanup
+  * Close connections and files
+  * Reset mocked objects
+  * Clean up temporary data
+
+## Examples
+
+<example>
+# Good - Proper fixture organization in conftest.py
+```python
+# --- Test Environment Configuration --- #
+
+@pytest.fixture(scope="session")
+def mock_env_vars() -> Dict[str, str]:
+    """Provide base environment variables for testing.
+
+    Scope: session - shared across all tests
+    Returns: Dict of environment variables
+    """
+    return {
+        "API_KEY": "test-key",
+        "DEBUG": "true"
+    }
+
+# --- Core Test Fixtures --- #
+
+@pytest.fixture(scope="function")
+def settings(mock_env_vars: Dict[str, str]) -> Settings:
+    """Provide test settings.
+
+    Scope: function - ensures test isolation
+    Args:
+        mock_env_vars: Environment variables fixture
+    Returns: Settings instance
+    """
+    return Settings(**mock_env_vars)
+
+# Good - Using shared fixtures with documentation
+def test_feature(settings: Settings, mocker: MockerFixture):
+    """Test feature using shared fixtures.
+
+    Note: Using standardized fixtures from conftest.py:
+    - settings: Core settings fixture
+    - mocker: PyTest mock fixture
+    """
+    result = process_with_settings(settings)
+    assert result.is_valid
+```
+
+# Good - Async fixture with cleanup
+```python
+@pytest.fixture(scope="function")
+async def client(settings: Settings) -> AsyncGenerator[Client, None]:
+    """Provide test API client.
+
+    Scope: function - ensures clean client for each test
+    Args:
+        settings: Test settings fixture
+    Yields: Configured client instance
+    Cleanup: Closes client connection
+    """
+    client = Client(settings)
+    await client.connect()
+    yield client
+    await client.close()
+```
+</example>
+
+<example type="invalid">
+# Bad - Duplicate fixture definitions
+```python
+# test_feature1.py
+@pytest.fixture
+def settings():  # BAD: Duplicating settings fixture
+    return Settings(debug=True)
+
+# test_feature2.py
+@pytest.fixture
+def settings():  # BAD: Another duplicate
+    return Settings(debug=True)
+```
+
+# Bad - Missing documentation and organization
+```python
+# conftest.py
+@pytest.fixture  # BAD: Missing scope
+def client():  # BAD: Missing type hints
+    return Client()  # BAD: No cleanup
+
+@pytest.fixture  # BAD: No docstring
+def settings():
+    return Settings()
+
+# BAD: No organization or sections
+@pytest.fixture
+def database():
+    return Database()
+```
+
+# Bad - Improper fixture usage
+```python
+# BAD: Creating module-level test objects
+test_client = Client()
+
+def test_feature():
+    # BAD: Using global client instead of fixture
+    result = test_client.process()
+    assert result.is_valid
+
+# BAD: Recreating fixture logic
+def test_another_feature():
+    settings = Settings(debug=True)  # Should use fixture
+    client = Client(settings)  # Should use fixture
+```
+</example>

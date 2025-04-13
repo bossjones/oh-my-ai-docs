@@ -1,0 +1,66 @@
+---
+description: "This rule governs the use of mocking in Python tests. It should be applied whenever: (1) Writing new test files, (2) Modifying existing tests that use mocking, (3) Reviewing test code that contains mocks, or (4) Converting existing tests to use pytest-mock. This ensures consistent mocking practices and leverages pytest's powerful fixture system."
+globs: ""
+alwaysApply: false
+---
+
+# Python Mocking Standards
+
+## Critical Rules
+
+- ALWAYS use pytest-mock (mocker fixture) instead of unittest.mock
+- NEVER import from unittest.mock directly
+- Use the mocker fixture in test function parameters
+- Use mocker.patch for patching modules and objects
+- Use mocker.Mock() instead of unittest.mock.Mock()
+- Use mocker.PropertyMock() for mocking properties
+- Use spy = mocker.spy(obj, 'method') for spying on methods
+- Prefer mocker.patch.object() over mocker.patch for clearer intent
+- Use autospec=True when patching to ensure signature matching
+- Place mocks at the test function level, not module level
+- Reset mocks in teardown if used in fixtures
+
+## Examples
+
+<example>
+# Good mocking practice
+```python
+def test_health_check_periodic(mocker):
+    """Test periodic health check with proper mocking."""
+    # Use mocker fixture
+    mock_check = mocker.Mock(return_value=True)
+    mock_sleep = mocker.patch('asyncio.sleep', return_value=None)
+
+    # Use patch.object for clearer intent
+    health_checker = HealthCheck()
+    mocker.patch.object(health_checker, '_check_component',
+                       return_value=True, autospec=True)
+
+    # Use spy for verification
+    spy = mocker.spy(health_checker, 'mark_component_healthy')
+
+    result = health_checker.check_component('test')
+    assert result is True
+    spy.assert_called_once_with('test')
+```
+</example>
+
+<example type="invalid">
+# Bad mocking practice
+```python
+from unittest.mock import Mock, patch  # WRONG: Don't import from unittest.mock
+
+@patch('asyncio.sleep')  # WRONG: Don't use decorator-based patching
+def test_health_check_periodic(mock_sleep):
+    mock_check = Mock()  # WRONG: Don't use unittest.Mock directly
+
+    # WRONG: No autospec
+    @patch('health_check.HealthCheck._check_component')
+    def inner_test(mock_check):
+        health_checker = HealthCheck()
+        result = health_checker.check_component('test')
+        assert result is True
+
+    inner_test()
+```
+</example>
