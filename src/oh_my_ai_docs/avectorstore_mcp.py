@@ -20,6 +20,7 @@ from langchain_openai import OpenAIEmbeddings
 from mcp.server.fastmcp import Context, FastMCP
 from mcp.server.fastmcp.exceptions import ResourceError
 from mcp.server.fastmcp.utilities.logging import get_logger
+from pydantic import BaseModel, Field, field_validator
 
 # Configure logging
 logger = get_logger(__name__)
@@ -44,18 +45,16 @@ parser.add_argument(
     "--list-vectorstores", action="store_true", help="List available vector stores (searches for .parquet files)"
 )
 parser.add_argument(
-    "--generate-mcp-config", action="store_true", help="Generate mcp.json configuration for all modules"
+    "--generate-mcp-config", action="store_true", help="Generate mcp_server.json configuration for all modules"
 )
-parser.add_argument("--save", action="store_true", help="Save the generated mcp.json configuration to disk")
+parser.add_argument("--save", action="store_true", help="Save the generated mcp_server.json configuration to disk")
 parser.add_argument(
     "--stdio", action="store_true", default=True, help="Run in stdio mode with all logging/printing disabled"
 )
 parser.add_argument("--debug", action="store_true", help="Enable debug mode with verbose logging")
 
-args = parser.parse_args()
 
-
-def get_config_info():
+def get_config_info(args: argparse.Namespace):
     """Get configuration information for display"""
     module_path = DOCS_PATH / args.module
     config = {
@@ -106,7 +105,7 @@ def list_vectorstores():
 
 
 def generate_mcp_config() -> dict[str, dict[str, Any]]:
-    """Generate mcp.json configuration for all modules"""
+    """Generate mcp_server.json configuration for all modules"""
     modules = ["discord", "dpytest", "langgraph"]
 
     # Get the script path relative to BASE_PATH
@@ -131,18 +130,28 @@ def generate_mcp_config() -> dict[str, dict[str, Any]]:
 
 def save_mcp_config(config: dict[str, dict[str, Any]]) -> None:
     """Save the MCP configuration to disk"""
-    save_path = BASE_PATH / "mcp.json"
+    save_path = BASE_PATH / "mcp_server.json"
     with open(save_path, "w") as f:
         json.dump(config, indent=2, fp=f)
     print(f"\nConfiguration saved to {save_path}")
 
 
+def get_args():
+    """Get command line arguments"""
+    return parser.parse_args()
+
+
+def create_mcp_server(module_name: str = "discord"):
+    """Create MCP server instance"""
+    return FastMCP(f"{module_name}-docs-mcp-server".lower())
+
+
 # Create an MCP server with module name
-mcp = FastMCP(f"{args.module}-docs-mcp-server".lower())
+mcp_server: FastMCP = create_mcp_server()
 
 # # Option 2: Run with STDIO transport
 # async def start_server_stdio():
-#     await mcp.run_stdio_async()
+#     await mcp_server.run_stdio_async()
 
 
 class MCPError(Exception):
@@ -192,7 +201,7 @@ async def vectorstore_session(vectorstore_path: str):
 
 
 # Add a tool to query the documentation
-@mcp.tool(
+@mcp_server.tool(
     name="query_docs",
     description="Search through module documentation using semantic search to find relevant information based on your query",
 )
@@ -256,7 +265,7 @@ async def query_tool(query: str, ctx: Context[Any, Any], config: QueryConfig | N
         raise ToolError(f"Failed to query vectorstore: {e!s}")
 
 
-@mcp.resource(
+@mcp_server.resource(
     uri="docs://{module}/full",
     name="module_documentation",
     description="Retrieves the full documentation content for a specified module (discord, dpytest, or langgraph). Returns the raw text content from the module's documentation file.",
@@ -303,6 +312,13 @@ async def get_all_docs(module: str) -> str:
 if __name__ == "__main__":
     import asyncio
 
+    # Get command line arguments
+    args = get_args()
+
+    # Update MCP server with correct module
+    global mcp_server
+    mcp_server = create_mcp_server(args.module)
+
     # Configure logging based on debug flag
     if args.debug:
         logging.basicConfig(level=logging.DEBUG)
@@ -323,7 +339,7 @@ if __name__ == "__main__":
         if args.save:
             save_mcp_config(config)
     elif args.dry_run:
-        config = get_config_info()
+        config = get_config_info(args)
         print("\n=== MCP Server Configuration ===\n")
         print(json.dumps(config, indent=2))
         print("\nDry run completed. Use without --dry-run to start the server.")
@@ -331,4 +347,4 @@ if __name__ == "__main__":
         # Initialize and run the server
         if not args.stdio:
             print(f"Starting MCP server for {args.module} documentation...")
-        mcp.run(transport="stdio")
+        mcp_server.run(transport="stdio")
