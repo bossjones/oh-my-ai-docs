@@ -11,11 +11,16 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Any, Dict, List, Optional, TypeVar
 
+import aiofiles
 from langchain_community.vectorstores import SKLearnVectorStore
 from langchain_core.documents.base import Document
 from langchain_openai import OpenAIEmbeddings
 from mcp.server.fastmcp import Context, FastMCP
+from mcp.server.fastmcp.exceptions import ResourceError
+from mcp.server.fastmcp.utilities.logging import get_logger
 from pydantic import BaseModel, Field, field_validator
+
+logger = get_logger(__name__)
 
 T = TypeVar('T')
 
@@ -239,9 +244,15 @@ async def query_tool(
         await ctx.error(f"Query failed: {e!s}")
         raise ToolError(f"Failed to query vectorstore: {e!s}")
 
-# The @mcp.resource() decorator is meant to map a URI pattern to a function that provides the resource content
-@mcp.resource("docs://{module}/full")
-def get_all_docs(module: str) -> str:
+
+
+@mcp.resource(
+    uri="docs://{module}/full",
+    name="module_documentation",
+    description="Retrieves the full documentation content for a specified module (discord, dpytest, or langgraph). Returns the raw text content from the module's documentation file.",
+    mime_type="text/plain",
+)
+async def get_all_docs(module: str) -> str:
     """
     Get all the documentation for the specified module. Returns the contents of the {module}_docs.txt file,
     which contains a curated set of documentation. This is useful for a comprehensive response to questions.
@@ -251,17 +262,44 @@ def get_all_docs(module: str) -> str:
 
     Returns:
         str: The contents of the module's documentation
-    """
-    if module != args.module:
-        return f"Error: Requested module '{module}' does not match server module '{args.module}'"
 
-    # Local path to the documentation
-    doc_path = DOCS_PATH / module / f"{module}_docs.txt"
+    Raises:
+        ResourceError: If the module doesn't match or if there's an error reading the documentation
+    """
     try:
-        with open(doc_path) as file:
-            return file.read()
+        if module != args.module:
+            logger.error("Module mismatch", extra={
+                "requested_module": module,
+                "server_module": args.module
+            })
+            raise ResourceError(f"Requested module '{module}' does not match server module '{args.module}'")
+
+        # Local path to the documentation
+        doc_path = DOCS_PATH / module / f"{module}_docs.txt"
+
+        if not doc_path.exists():
+            logger.error("Documentation file not found", extra={
+                "module": module,
+                "path": str(doc_path)
+            })
+            raise ResourceError(f"Documentation file not found for module: {module}")
+
+        async with aiofiles.open(doc_path) as file:
+            content = await file.read()
+            logger.info("Successfully read documentation", extra={
+                "module": module,
+                "size": len(content)
+            })
+            return content
+
+    except ResourceError:
+        raise
     except Exception as e:
-        return f"Error reading documentation file: {e!s}"
+        logger.error("Error reading documentation", extra={
+            "module": module,
+            "error": str(e)
+        })
+        raise ResourceError(f"Error reading documentation file: {e}")
 
 if __name__ == "__main__":
     if args.list_vectorstores:

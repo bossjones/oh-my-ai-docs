@@ -92,6 +92,7 @@
         { email = "bossjones@theblacktonystark.com", name = "Malcolm Jones" },
     ]
     dependencies = [
+        "aiofiles>=24.1.0",
         "anthropic>=0.49.0",
         "asyncer>=0.0.8",
         "better-exceptions>=0.3.3",
