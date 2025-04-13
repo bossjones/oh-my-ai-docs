@@ -110,7 +110,7 @@ alwaysApply: false
    ```python
    # ✅ Good
    import pytest
-   from fastmcp import FastMCP
+   from mcp.server.fastmcp import FastMCP
    from typing import AsyncGenerator
    from unittest.mock import AsyncMock
 
@@ -165,7 +165,7 @@ alwaysApply: false
    ```python
    # ✅ Good
    import pytest
-   from fastmcp import FastMCP, TestClient
+   from mcp.server.fastmcp import FastMCP, TestClient
    from typing import AsyncGenerator
    import asyncio
 
@@ -232,7 +232,7 @@ alwaysApply: false
    ```python
    # ✅ Good
    import pytest
-   from fastmcp import FastMCP
+   from mcp.server.fastmcp import FastMCP
    from unittest.mock import AsyncMock
    import asyncio
 

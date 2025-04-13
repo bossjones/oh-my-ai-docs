@@ -1,5 +1,204 @@
 ---
-description:
+description: This rule governs the configuration and initialization of FastMCP servers. It should be applied whenever: (1) Creating a new FastMCP server instance, (2) Modifying server configuration, (3) Setting up environment variables for FastMCP, (4) Implementing transport protocols, or (5) Configuring logging and security settings. The rule ensures consistent server setup, proper error handling, and secure defaults across all FastMCP server implementations.
 globs:
 alwaysApply: false
 ---
+
+# FastMCP Core Server Configuration Rules
+
+## Critical Rules
+
+1. **Environment Configuration**
+   - Always use the `FASTMCP_` prefix for environment variables
+   - Store sensitive configuration in `.env` files (never commit to version control)
+   - Use explicit typing for all configuration values
+   - Document all environment variables in project README
+   - Example:
+   ```python
+   # ✅ Good
+   FASTMCP_DEBUG=false
+   FASTMCP_LOG_LEVEL=INFO
+   FASTMCP_PORT=8000
+
+   # ❌ Bad
+   DEBUG=true  # Missing prefix
+   FASTMCP_PORT="8000"  # String instead of int
+   ```
+
+2. **Server Initialization**
+   - Always provide a descriptive server name
+   - Include comprehensive server instructions
+   - Configure proper logging levels
+   - Handle lifespan management explicitly
+   - Example:
+   ```python
+   # ✅ Good
+   app = FastMCP(
+       name="MyService",
+       instructions="Service for processing data",
+       log_level="INFO",
+       lifespan=my_lifespan_manager
+   )
+
+   # ❌ Bad
+   app = FastMCP()  # Missing critical configuration
+   ```
+
+3. **Transport Protocol Configuration**
+   - Choose appropriate transport (SSE or STDIO) based on use case
+   - Configure timeouts and connection limits
+   - Implement proper error handling for transport failures
+   - Example:
+   ```python
+   # ✅ Good
+   app.run(transport="sse")  # Web-based interface
+
+   # For STDIO with proper error handling
+   try:
+       app.run(transport="stdio")
+   except ConnectionError:
+       logger.error("Transport failure")
+       sys.exit(1)
+   ```
+
+4. **Resource and Tool Management**
+   - Enable duplicate warnings in development
+   - Disable duplicate warnings in production for performance
+   - Configure proper resource limits
+   - Example:
+   ```python
+   # ✅ Good
+   app = FastMCP(
+       warn_on_duplicate_resources=IS_DEVELOPMENT,
+       warn_on_duplicate_tools=IS_DEVELOPMENT,
+       warn_on_duplicate_prompts=IS_DEVELOPMENT
+   )
+
+   # ❌ Bad
+   app = FastMCP(
+       warn_on_duplicate_resources=False  # Missing context-aware configuration
+   )
+   ```
+
+5. **Logging Configuration**
+   - Set appropriate log levels for different environments
+   - Configure structured logging
+   - Include request IDs in logs
+   - Example:
+   ```python
+   # ✅ Good
+   app = FastMCP(
+       log_level="DEBUG" if IS_DEVELOPMENT else "INFO",
+       **logging_config
+   )
+
+   # ❌ Bad
+   app = FastMCP(log_level="DEBUG")  # Fixed log level
+   ```
+
+6. **Security Configuration**
+   - Set secure defaults for all settings
+   - Configure CORS properly for SSE transport
+   - Implement rate limiting
+   - Example:
+   ```python
+   # ✅ Good
+   app = FastMCP(
+       host="127.0.0.1",  # Local only by default
+       port=8000,
+       **security_config
+   )
+
+   # ❌ Bad
+   app = FastMCP(
+       host="0.0.0.0",  # Exposed to all interfaces without explicit intent
+   )
+   ```
+
+## Examples
+
+# Server Configuration Examples
+
+# Standard library
+from typing import Optional, Dict, Any
+from pathlib import Path
+
+# Third-party
+from pydantic import BaseModel, Field
+import yaml
+
+# MCP packages
+from mcp.server.fastmcp import FastMCP
+from mcp.server.fastmcp.config import ServerConfig, LogConfig
+from mcp.server.fastmcp.utilities.logging import get_logger, configure_logging
+
+# Complete Configuration Implementation
+from typing import Optional, Dict
+from pathlib import Path
+
+from pydantic import BaseModel, Field
+import yaml
+
+from mcp.server.fastmcp import FastMCP
+from mcp.server.fastmcp.config import ServerConfig
+from mcp.server.fastmcp.utilities.logging import get_logger
+
+<example>
+# Complete FastMCP Server Configuration
+# Standard library
+from pathlib import Path
+
+# Third-party
+import yaml
+
+# MCP packages
+from mcp.server.fastmcp import FastMCP
+from mcp.server.fastmcp.config import ServerConfig
+from myapp.config import get_config
+from myapp.logging import setup_logging
+from myapp.security import security_settings
+
+def configure_server():
+    # Load environment-specific configuration
+    config = get_config()
+
+    # Initialize server with proper configuration
+    app = FastMCP(
+        name="MyService",
+        instructions="Production-grade FastMCP service",
+        log_level=config.log_level,
+        host=config.host,
+        port=config.port,
+        warn_on_duplicate_resources=config.is_development,
+        warn_on_duplicate_tools=config.is_development,
+        warn_on_duplicate_prompts=config.is_development,
+        lifespan=config.lifespan_manager,
+        **security_settings
+    )
+
+    # Setup additional components
+    setup_logging(app)
+
+    return app
+</example>
+
+<example type="invalid">
+# DON'T: Hardcode configuration
+app = FastMCP(
+    host="0.0.0.0",
+    port=8000,
+    log_level="DEBUG"
+)
+
+# DON'T: Ignore environment-specific settings
+app = FastMCP(
+    warn_on_duplicate_resources=True  # Should depend on environment
+)
+
+# DON'T: Mix security concerns
+app = FastMCP(
+    host="0.0.0.0",
+    port=8000,
+    ssl=False  # Security should be handled systematically
+)
+</example>

@@ -217,7 +217,8 @@ from mcp.server.fastmcp.utilities.logging import get_logger
 
 <example>
 # Complete Prompt Implementation Example
-from fastmcp import FastMCP, Message, UserMessage, AssistantMessage
+from mcp.server.fastmcp import FastMCP
+from mcp.server.fastmcp.types import Message, UserMessage, AssistantMessage
 from pydantic import BaseModel, Field
 from typing import Any, Literal
 from functools import lru_cache

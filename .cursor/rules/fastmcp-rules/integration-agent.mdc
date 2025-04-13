@@ -16,10 +16,13 @@ alwaysApply: false
    - Example:
    ```python
    # ✅ Good
-   from fastmcp import FastMCP, Client
    from typing import Optional
-   from pydantic import BaseModel
+
    import semver
+   from pydantic import BaseModel
+
+   from mcp.server.fastmcp import FastMCP
+   from mcp.server.fastmcp.client import Client
 
    class ClientConfig(BaseModel):
        api_version: str
@@ -66,11 +69,16 @@ alwaysApply: false
    - Example:
    ```python
    # ✅ Good
-   from fastmcp import ServiceRegistry
    from typing import List, Optional
-   from pydantic import BaseModel
-   import aiohttp
    import asyncio
+   import aiohttp
+
+   from pydantic import BaseModel
+
+   from mcp.server.fastmcp.services import ServiceRegistry
+   from mcp.server.fastmcp.utilities.logging import get_logger
+
+   logger = get_logger(__name__)
 
    class ServiceConfig(BaseModel):
        name: str
@@ -128,10 +136,14 @@ alwaysApply: false
    - Example:
    ```python
    # ✅ Good
-   from fastmcp import EventBus, Event
    from typing import Any, Callable, List
    from datetime import datetime
    import asyncio
+
+   from mcp.server.fastmcp.events import EventBus, Event
+   from mcp.server.fastmcp.utilities.logging import get_logger
+
+   logger = get_logger(__name__)
 
    class EventStore:
        def __init__(self):
@@ -185,10 +197,15 @@ alwaysApply: false
    - Example:
    ```python
    # ✅ Good
-   from fastmcp import MessageSchema
    from typing import Any, Optional
+   from datetime import datetime
+
    from pydantic import BaseModel, Field
-   import json
+
+   from mcp.server.fastmcp.messages import MessageSchema
+   from mcp.server.fastmcp.utilities.logging import get_logger
+
+   logger = get_logger(__name__)
 
    class MessageHeader(BaseModel):
        version: str
@@ -238,10 +255,14 @@ alwaysApply: false
    - Example:
    ```python
    # ✅ Good
-   from fastmcp import Protocol, ProtocolVersion
    from typing import List, Optional
    from enum import Enum
    import asyncio
+
+   from mcp.server.fastmcp.protocols import Protocol, ProtocolVersion
+   from mcp.server.fastmcp.utilities.logging import get_logger
+
+   logger = get_logger(__name__)
 
    class ProtocolType(Enum):
        HTTP = "http"
@@ -324,7 +345,10 @@ from mcp.server.fastmcp.utilities.logging import get_logger
 
 <example>
 # Complete Integration Implementation
-from fastmcp import FastMCP, ServiceRegistry, EventBus, Protocol
+from mcp.server.fastmcp import FastMCP
+from mcp.server.fastmcp.services import ServiceRegistry
+from mcp.server.fastmcp.events import EventBus
+from mcp.server.fastmcp.protocols import Protocol
 from typing import Any, Optional
 import structlog
 import asyncio

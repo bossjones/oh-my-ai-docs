@@ -235,6 +235,7 @@ from datetime import datetime
 
 # Third-party
 from pydantic import BaseModel, Field
+import structlog
 
 # MCP packages
 from mcp.server.fastmcp import FastMCP, Context
@@ -256,11 +257,17 @@ from mcp.server.fastmcp.utilities.logging import get_logger
 
 <example>
 # Complete Context Management Implementation
-from fastmcp import FastMCP, WebSocket
-from pydantic import BaseModel
+# Standard library
 from typing import Any, Optional
 from datetime import datetime
+
+# Third-party
+from pydantic import BaseModel
 import structlog
+
+# MCP packages
+from mcp.server.fastmcp import FastMCP
+from mcp.server.fastmcp.websocket import WebSocket
 
 # Context Models
 class SessionContext(BaseModel):

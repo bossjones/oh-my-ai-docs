@@ -130,66 +130,908 @@ alwaysApply: false
        return expensive_computation()  # Blocks on resource registration
    ```
 
+6. **URI Handling and Validation**
+   - All URIs must include protocol and host components
+   - Support custom URI schemes (fn://, resource://, etc.)
+   - Validate URIs using pydantic AnyUrl
+   - Use descriptive, hierarchical paths
+   - Example:
+   ```python
+   from pydantic import AnyUrl
+   from mcp.server.fastmcp.resources import FunctionResource
+
+   # ✅ Good
+   # Valid URI with protocol and host
+   resource = FunctionResource(
+       uri=AnyUrl("fn://my-function/data"),
+       name="data-function",
+       fn=lambda: "Hello, world!"
+   )
+
+   # Valid custom scheme
+   resource = FunctionResource(
+       uri=AnyUrl("resource://my-resource"),
+       name="custom-resource",
+       fn=lambda: {"data": "value"}
+   )
+
+   # Template pattern with validation
+   @app.resource("fn://users/{user_id}/profile")
+   async def get_user_profile(user_id: str) -> dict:
+       return await db.get_user(user_id)
+
+   # ❌ Bad
+   # Missing protocol
+   resource = FunctionResource(
+       uri=AnyUrl("invalid-uri"),  # Raises ValueError
+       name="test",
+       fn=lambda: "data"
+   )
+
+   # Missing host
+   resource = FunctionResource(
+       uri=AnyUrl("fn://"),  # Raises ValueError
+       name="test",
+       fn=lambda: "data"
+   )
+
+   # Non-descriptive path
+   resource = FunctionResource(
+       uri=AnyUrl("fn://1234"),  # Avoid opaque identifiers
+       name="test",
+       fn=lambda: "data"
+   )
+   ```
+
+7. **Resource Creation and Type Handling**
+   - Use proper type hints for all parameters and return types
+   - Support async and sync function resources
+   - Handle BaseModel serialization automatically
+   - Implement custom type conversion
+   - Example:
+   ```python
+   from pydantic import AnyUrl, BaseModel
+   from typing import Dict, Any
+   from mcp.server.fastmcp.resources import FunctionResource
+
+   # ✅ Good
+   # Basic function resource with type hints
+   def get_data() -> str:
+       return "Hello, world!"
+
+   resource = FunctionResource(
+       uri=AnyUrl("fn://test"),
+       name="test",
+       description="test function",
+       fn=get_data,
+       mime_type="text/plain"
+   )
+
+   # Async function resource
+   async def get_async_data() -> str:
+       return "Hello, world!"
+
+   async_resource = FunctionResource(
+       uri=AnyUrl("fn://async-test"),
+       name="async-test",
+       fn=get_async_data
+   )
+
+   # BaseModel serialization
+   class UserProfile(BaseModel):
+       name: str
+       age: int
+
+   resource = FunctionResource(
+       uri=AnyUrl("fn://users/profile"),
+       name="user-profile",
+       fn=lambda: UserProfile(name="test", age=25)
+   )
+   # Automatically serializes to '{"name": "test", "age": 25}'
+
+   # Custom type conversion
+   class CustomData:
+       def __str__(self) -> str:
+           return "custom data"
+
+   def get_custom_data() -> CustomData:
+       return CustomData()
+
+   resource = FunctionResource(
+       uri=AnyUrl("fn://custom"),
+       name="custom",
+       fn=get_custom_data
+   )
+   # Automatically converts to string using __str__
+
+   # ❌ Bad
+   # Missing type hints
+   def bad_function(data):  # Missing return type hint
+       return data
+
+   # Incorrect return type
+   def wrong_type() -> str:
+       return {"key": "value"}  # Returns dict instead of str
+
+   # No type conversion handling
+   class BadCustomType:
+       pass
+
+   def bad_custom() -> BadCustomType:
+       return BadCustomType()  # No string conversion method
+   ```
+
+8. **Error Handling and Logging**
+   - Use specific error types for different scenarios
+   - Include context in error messages
+   - Implement proper logging with extra context
+   - Handle validation errors gracefully
+   - Example:
+   ```python
+   from mcp.server.fastmcp.utilities.logging import get_logger
+   from mcp.server.fastmcp.utilities.errors import ResourceError
+   from typing import Optional, Union
+
+   logger = get_logger(__name__)
+
+   # ✅ Good
+   class ResourceManager:
+       async def get_resource(self, uri: str) -> Resource:
+           try:
+               resource = self._resources.get(uri)
+               if not resource:
+                   logger.error("Resource not found", extra={"uri": uri})
+                   raise ResourceError(f"Resource not found: {uri}")
+               return resource
+           except Exception as e:
+               logger.error("Error accessing resource",
+                          extra={"uri": uri, "error": str(e)})
+               raise ResourceError(f"Error accessing resource {uri}: {e}")
+
+   class FunctionResource(Resource):
+       async def read(self) -> Union[str, bytes]:
+           try:
+               result = await self.fn()
+               return self._convert_result(result)
+           except ValueError as e:
+               logger.error("Error reading resource",
+                          extra={"uri": str(self.uri), "error": str(e)})
+               raise ValueError(f"Error reading resource {self.uri}: {e}")
+           except Exception as e:
+               logger.error("Unexpected error",
+                          extra={"uri": str(self.uri), "error": str(e)})
+               raise ResourceError(f"Unexpected error reading {self.uri}: {e}")
+
+       def _convert_result(self, result: Any) -> Union[str, bytes]:
+           try:
+               if isinstance(result, (str, bytes)):
+                   return result
+               if hasattr(result, "model_dump_json"):  # Pydantic model
+                   return result.model_dump_json()
+               return str(result)
+           except Exception as e:
+               logger.error("Type conversion error",
+                          extra={"type": type(result).__name__})
+               raise ValueError(f"Cannot convert {type(result).__name__} to string")
+
+   # ❌ Bad
+   class BadResourceManager:
+       def get_resource(self, uri: str) -> Optional[Resource]:
+           return self._resources.get(uri)  # No error handling or logging
+
+   class BadFunctionResource(Resource):
+       async def read(self) -> str:
+           result = await self.fn()  # No error handling
+           return str(result)  # Unsafe type conversion
+
+       def process_data(self, data: Any) -> None:
+           try:
+               self._process(data)
+           except Exception:
+               pass  # Silent failure, no logging
+   ```
+
+9. **Resource Manager Configuration and Lifecycle**
+   - Configure warning behavior for duplicate resources
+   - Implement proper template matching and error handling
+   - Ensure proper resource cleanup in shutdown handlers
+   - Provide resource listing and filtering capabilities
+   - Example:
+   ```python
+   from mcp.server.fastmcp import FastMCP
+   from mcp.server.fastmcp.resources import ResourceManager
+   from mcp.server.fastmcp.utilities.logging import get_logger
+   from typing import List, Optional
+
+   logger = get_logger(__name__)
+
+   # ✅ Good
+   class ConfiguredResourceManager(ResourceManager):
+       def __init__(self, warn_on_duplicate: bool = True):
+           super().__init__()
+           self._warn_on_duplicate = warn_on_duplicate
+           self._templates = {}
+
+       def add_resource(self, resource: Resource) -> None:
+           if self._warn_on_duplicate and resource.uri in self._resources:
+               logger.warning("Duplicate resource", extra={
+                   "uri": str(resource.uri),
+                   "existing": type(self._resources[resource.uri]).__name__,
+                   "new": type(resource).__name__
+               })
+           self._resources[str(resource.uri)] = resource
+
+       def list_resources(self, prefix: Optional[str] = None) -> List[Resource]:
+           """List resources with optional prefix filtering."""
+           if not prefix:
+               return list(self._resources.values())
+           return [r for r in self._resources.values()
+                  if str(r.uri).startswith(prefix)]
+
+   # Resource template handling
+   app = FastMCP()
+   manager = ConfiguredResourceManager(warn_on_duplicate=True)
+
+   @app.on_startup
+   async def setup_resources():
+       # Register base resources
+       manager.add_resource(
+           TextResource(
+               uri="resource://config/default",
+               text="Default configuration"
+           )
+       )
+
+       # Register templates
+       @manager.template("resource://users/{user_id}/profile")
+       async def get_user_profile(user_id: str) -> Resource:
+           try:
+               user_data = await db.get_user(user_id)
+               return FunctionResource(
+                   uri=f"resource://users/{user_id}/profile",
+                   fn=lambda: user_data
+               )
+           except Exception as e:
+               logger.error("Template error", extra={
+                   "template": "user_profile",
+                   "user_id": user_id,
+                   "error": str(e)
+               })
+               raise ResourceError(f"Error creating user profile resource: {e}")
+
+   @app.on_shutdown
+   async def cleanup_resources():
+       """Ensure proper resource cleanup."""
+       for resource in manager.list_resources():
+           try:
+               if hasattr(resource, "cleanup"):
+                   await resource.cleanup()
+           except Exception as e:
+               logger.error("Cleanup error", extra={
+                   "uri": str(resource.uri),
+                   "error": str(e)
+               })
+
+   # ❌ Bad
+   class BadResourceManager:
+       def add_resource(self, resource: Resource):
+           self._resources[resource.uri] = resource  # No duplicate checking
+
+       def get_template(self, uri: str):
+           return self._templates.get(uri)  # No error handling
+
+       def cleanup(self):  # Not async
+           for resource in self._resources.values():
+               resource.cleanup()  # Not awaited
+
+   # Bad template handling
+   @bad_manager.template("users/*")  # Too broad pattern
+   def bad_template(path: str):  # Missing type hints
+       return get_resource(path)  # No error handling
+   ```
+
+10. **Testing Patterns and Best Practices**
+    - Implement proper resource mocking
+    - Use async test patterns with pytest.mark.anyio
+    - Handle test resource cleanup
+    - Test validation and error cases
+    - Example:
+    ```python
+    import pytest
+    from pydantic import BaseModel
+    from typing import Dict, Any
+    from mcp.server.fastmcp.resources import FunctionResource, ResourceTemplate
+
+    # ✅ Good
+    class TestResourceImplementation:
+        """Test resource implementation patterns."""
+
+        @pytest.fixture
+        async def resource_manager(self):
+            """Fixture for resource manager with cleanup."""
+            manager = ResourceManager()
+            yield manager
+            # Cleanup all resources after test
+            for resource in manager.list_resources():
+                if hasattr(resource, "cleanup"):
+                    await resource.cleanup()
+
+        @pytest.mark.anyio
+        async def test_async_resource(self):
+            """Test async resource implementation."""
+            async def get_data() -> str:
+                return "test data"
+
+            resource = FunctionResource(
+                uri="test://async",
+                name="async-test",
+                fn=get_data
+            )
+            content = await resource.read()
+            assert content == "test data"
+
+        @pytest.mark.anyio
+        async def test_template_matching(self):
+            """Test resource template matching."""
+            def data_func(key: str, value: int) -> Dict[str, Any]:
+                return {"key": key, "value": value}
+
+            template = ResourceTemplate.from_function(
+                fn=data_func,
+                uri_template="test://{key}/{value}",
+                name="test-template"
+            )
+
+            # Test valid match
+            params = template.matches("test://foo/123")
+            assert params == {"key": "foo", "value": "123"}
+
+            # Test no match
+            assert template.matches("invalid://uri") is None
+
+        @pytest.mark.anyio
+        async def test_error_handling(self):
+            """Test resource error scenarios."""
+            def failing_func() -> None:
+                raise ValueError("Test error")
+
+            resource = FunctionResource(
+                uri="test://error",
+                name="error-test",
+                fn=failing_func
+            )
+            with pytest.raises(ValueError, match="Error reading resource"):
+                await resource.read()
+
+        @pytest.mark.anyio
+        async def test_model_serialization(self):
+            """Test BaseModel resource handling."""
+            class TestModel(BaseModel):
+                name: str
+                value: int
+
+            resource = FunctionResource(
+                uri="test://model",
+                name="model-test",
+                fn=lambda: TestModel(name="test", value=42)
+            )
+            content = await resource.read()
+            assert '"name": "test"' in content
+            assert '"value": 42' in content
+
+    # ❌ Bad
+    class BadTestPatterns:
+        def test_without_cleanup(self):  # Missing cleanup
+            manager = ResourceManager()
+            manager.add_resource(resource)
+            # No cleanup after test
+
+        def test_sync_only(self):  # Not async
+            resource = FunctionResource(
+                uri="test://sync",
+                fn=lambda: "data"
+            )
+            result = resource.read()  # Should be awaited
+
+        @pytest.mark.anyio
+        async def test_poor_assertions(self):
+            resource = create_test_resource()
+            content = await resource.read()
+            assert content  # Too broad assertion
+
+        def test_missing_error_cases(self):  # No error testing
+            resource = create_test_resource()
+            # Only testing happy path
+    ```
+
+11. **MIME Type Handling and Content Types**
+    - Validate MIME types using standard patterns
+    - Implement automatic MIME type detection
+    - Handle binary vs text content appropriately
+    - Support custom MIME types
+    - Example:
+    ```python
+    from pydantic import Field
+    from mcp.server.fastmcp.resources import Resource, FunctionResource
+    from mcp.server.fastmcp.utilities.types import MimeType
+    from typing import Union
+
+    # ✅ Good
+    class ContentAwareResource(Resource):
+        """Resource with proper MIME type handling."""
+        mime_type: str = Field(
+            default="application/json",
+            pattern=r"^[a-zA-Z0-9]+/[a-zA-Z0-9\-+.]+$",
+            description="MIME type must follow standard format"
+        )
+
+        async def read(self) -> Union[str, bytes]:
+            content = await self._fetch_content()
+            if self.mime_type.startswith("text/"):
+                return self._ensure_text(content)
+            return self._ensure_binary(content)
+
+        def _ensure_text(self, content: Union[str, bytes]) -> str:
+            if isinstance(content, bytes):
+                return content.decode('utf-8')
+            return content
+
+        def _ensure_binary(self, content: Union[str, bytes]) -> bytes:
+            if isinstance(content, str):
+                return content.encode('utf-8')
+            return content
+
+    # Automatic MIME type detection
+    class SmartResource(Resource):
+        def __init__(self, content: Union[str, bytes], **kwargs):
+            mime_type = self._detect_mime_type(content)
+            super().__init__(mime_type=mime_type, **kwargs)
+
+        def _detect_mime_type(self, content: Union[str, bytes]) -> str:
+            if isinstance(content, bytes):
+                # Check for common binary formats
+                if content.startswith(b'\x89PNG\r\n'):
+                    return 'image/png'
+                if content.startswith(b'\xFF\xD8'):
+                    return 'image/jpeg'
+                return 'application/octet-stream'
+
+            # Text content detection
+            if content.startswith('{') and content.endswith('}'):
+                return 'application/json'
+            if content.startswith('<?xml'):
+                return 'application/xml'
+            return 'text/plain'
+
+    # Custom MIME types
+    class CustomFormatResource(Resource):
+        mime_type: str = Field(
+            default="application/vnd.custom+json",
+            pattern=r"^application/vnd\.[a-zA-Z0-9\-]+\+json$",
+            description="Custom vendor MIME type"
+        )
+
+    # ❌ Bad
+    class BadMimeTypeHandling:
+        # Invalid MIME type format
+        resource = FunctionResource(
+            uri="test://bad",
+            fn=lambda: "data",
+            mime_type="invalid-type"  # Missing type/subtype structure
+        )
+
+        # Inconsistent content type
+        def read(self) -> str:
+            content = self._get_binary_data()
+            return content.decode()  # Always converting to string
+
+        # No MIME type validation
+        class UnsafeResource(Resource):
+            def __init__(self, mime_type: str):
+                self.mime_type = mime_type  # No validation
+    ```
+
+12. **Import Patterns and Organization**
+    - Use absolute imports from mcp.server.fastmcp
+    - Group imports by category
+    - Import specific types and utilities
+    - Avoid wildcard imports
+    - Example:
+    ```python
+    # ✅ Good
+    # Standard library imports
+    from pathlib import Path
+    from typing import Dict, List, Optional, Union, Any
+    from contextlib import asynccontextmanager
+
+    # Pydantic imports
+    from pydantic import AnyUrl, BaseModel, Field, FileUrl
+
+    # FastMCP core imports
+    from mcp.server.fastmcp import FastMCP
+    from mcp.server.fastmcp.resources import (
+        Resource,
+        ResourceManager,
+        ResourceTemplate,
+        FileResource,
+        FunctionResource,
+        TextResource
+    )
+
+    # FastMCP utilities
+    from mcp.server.fastmcp.utilities.logging import get_logger
+    from mcp.server.fastmcp.utilities.errors import ResourceError
+    from mcp.server.fastmcp.utilities.types import MimeType
+
+    # Testing imports (in test files)
+    import pytest
+    from pytest import fixture, mark
+
+    # ❌ Bad
+    # Wildcard imports
+    from mcp.server.fastmcp.resources import *  # Don't use wildcards
+
+    # Relative imports
+    from ...utilities import logger  # Avoid relative imports
+    from ..resources import Resource  # Use absolute imports instead
+
+    # Mixed import styles
+    import mcp.server.fastmcp.resources
+    from mcp.server.fastmcp import resources
+    resources.Resource  # Inconsistent usage
+
+    # Unorganized imports
+    from typing import Dict
+    from mcp.server.fastmcp.resources import Resource
+    from pathlib import Path
+    from typing import List  # Split typing imports
+    import json
+    from pydantic import BaseModel
+    ```
+
+    Implementation Example:
+    ```python
+    # resource_manager.py
+    from typing import Dict, List, Optional
+    from pydantic import AnyUrl
+
+    from mcp.server.fastmcp.resources.base import Resource
+    from mcp.server.fastmcp.utilities.logging import get_logger
+    from mcp.server.fastmcp.utilities.errors import ResourceError
+
+    logger = get_logger(__name__)
+
+    class ResourceManager:
+        def __init__(self):
+            self._resources: Dict[str, Resource] = {}
+
+        def add_resource(self, resource: Resource) -> Resource:
+            self._resources[str(resource.uri)] = resource
+            return resource
+
+        def list_resources(self) -> List[Resource]:
+            return list(self._resources.values())
+
+    # test_resources.py
+    import pytest
+    from pathlib import Path
+    from pydantic import AnyUrl, FileUrl
+
+    from mcp.server.fastmcp.resources import (
+        FileResource,
+        FunctionResource,
+        ResourceManager
+    )
+
+    @pytest.fixture
+    def resource_manager():
+        return ResourceManager()
+
+    @pytest.mark.anyio
+    async def test_resource_handling(resource_manager: ResourceManager):
+        # Test implementation
+        pass
+    ```
+
+# Core Resource Patterns
+
+## Critical Rules
+
+1. **Standard URI Patterns**
+   ```python
+   from mcp.server.fastmcp.resources import TextResource, FileResource, HttpResource
+   from mcp.server.fastmcp.resources.base import Resource
+
+   # Text Resources
+   text_resource = TextResource(
+       uri="resource://text/welcome",
+       text="Welcome message",
+       mime_type="text/plain"
+   )
+
+   # File Resources
+   file_resource = FileResource(
+       uri="resource://files/data.json",
+       path=Path("/absolute/path/data.json"),
+       mime_type="application/json"
+   )
+
+   # HTTP Resources
+   http_resource = HttpResource(
+       uri="resource://api/data",
+       url="https://api.example.com/data",
+       mime_type="application/json"
+   )
+   ```
+
+2. **MIME Type Validation**
+   ```python
+   from mcp.server.fastmcp.resources.base import Resource
+   from mcp.server.fastmcp.utilities.types import MimeType
+
+   class CustomResource(Resource):
+       mime_type: str = Field(
+           default="application/json",
+           pattern=r"^[a-zA-Z0-9]+/[a-zA-Z0-9\-+.]+$",
+           description="MIME type must follow standard format"
+       )
+   ```
+
+3. **Error Handling Pattern**
+   ```python
+   from mcp.server.fastmcp.utilities.logging import get_logger
+   from mcp.server.fastmcp.utilities.errors import ResourceError
+
+   logger = get_logger(__name__)
+
+   async def handle_resource(resource: Resource) -> str | bytes:
+       try:
+           content = await resource.read()
+           return content
+       except FileNotFoundError as e:
+           logger.error("Resource not found", extra={"uri": resource.uri})
+           raise ResourceError(f"Resource not found: {resource.uri}") from e
+       except PermissionError as e:
+           logger.error("Access denied", extra={"uri": resource.uri})
+           raise ResourceError(f"Access denied: {resource.uri}") from e
+       except Exception as e:
+           logger.error("Resource error", extra={"uri": resource.uri, "error": str(e)})
+           raise ResourceError(f"Error reading resource: {resource.uri}") from e
+   ```
+
+4. **Resource Lifecycle Management**
+   - Implement proper async initialization and cleanup
+   - Handle resource state throughout lifecycle
+   - Use context managers for resource management
+   - Implement resource pooling when needed
+   - Example:
+   ```python
+   from pathlib import Path
+   from typing import Optional, Dict, Any
+   from contextlib import asynccontextmanager
+   from mcp.server.fastmcp.resources import Resource, ResourceManager
+   from mcp.server.fastmcp.utilities.logging import get_logger
+
+   logger = get_logger(__name__)
+
+   # ✅ Good
+   class LifecycleManagedResource(Resource):
+       """Resource with proper lifecycle management."""
+       def __init__(self, **kwargs):
+           super().__init__(**kwargs)
+           self._initialized: bool = False
+           self._state: Dict[str, Any] = {}
+
+       async def initialize(self) -> None:
+           """Initialize resource state."""
+           if self._initialized:
+               return
+
+           try:
+               logger.debug("Initializing resource", extra={
+                   "uri": str(self.uri),
+                   "type": self.__class__.__name__
+               })
+               await self._setup_state()
+               self._initialized = True
+           except Exception as e:
+               logger.error("Initialization failed", extra={
+                   "uri": str(self.uri),
+                   "error": str(e)
+               })
+               raise
+
+       async def cleanup(self) -> None:
+           """Cleanup resource state."""
+           if not self._initialized:
+               return
+
+           try:
+               logger.debug("Cleaning up resource", extra={
+                   "uri": str(self.uri),
+                   "type": self.__class__.__name__
+               })
+               await self._cleanup_state()
+               self._initialized = False
+           except Exception as e:
+               logger.error("Cleanup failed", extra={
+                   "uri": str(self.uri),
+                   "error": str(e)
+               })
+               raise
+
+       async def _setup_state(self) -> None:
+           """Resource-specific initialization."""
+           pass
+
+       async def _cleanup_state(self) -> None:
+           """Resource-specific cleanup."""
+           pass
+
+       async def __aenter__(self) -> "LifecycleManagedResource":
+           await self.initialize()
+           return self
+
+       async def __aexit__(self, exc_type, exc_val, exc_tb) -> None:
+           await self.cleanup()
+
+   # Resource Pool Implementation
+   class ResourcePool:
+       """Pool of reusable resources."""
+       def __init__(self, factory, max_size: int = 10):
+           self._factory = factory
+           self._max_size = max_size
+           self._available: List[Resource] = []
+           self._in_use: Set[Resource] = set()
+
+       @asynccontextmanager
+       async def acquire(self) -> Resource:
+           """Get a resource from the pool."""
+           try:
+               resource = await self._get_resource()
+               self._in_use.add(resource)
+               yield resource
+           finally:
+               self._in_use.remove(resource)
+               self._available.append(resource)
+
+       async def _get_resource(self) -> Resource:
+           """Get or create a resource."""
+           if self._available:
+               return self._available.pop()
+           if len(self._in_use) < self._max_size:
+               resource = self._factory()
+               await resource.initialize()
+               return resource
+           raise ResourceError("Resource pool exhausted")
+
+       async def cleanup(self) -> None:
+           """Cleanup all resources in the pool."""
+           resources = self._available + list(self._in_use)
+           for resource in resources:
+               await resource.cleanup()
+
+   # Usage Example
+   class FileResourceManager:
+       def __init__(self):
+           self._pool = ResourcePool(
+               factory=lambda: FileResource(
+                   uri="file://temp",
+                   path=Path("/tmp/data")
+               ),
+               max_size=5
+           )
+
+       async def process_file(self, data: bytes) -> None:
+           async with self._pool.acquire() as resource:
+               await resource.write(data)
+
+       async def cleanup(self) -> None:
+           await self._pool.cleanup()
+
+   # ❌ Bad
+   class BadLifecycleResource(Resource):
+       def initialize(self):  # Not async
+           self.setup()
+
+       def cleanup(self):  # Not async
+           self.close()
+
+       def __enter__(self):  # Using sync context manager
+           return self
+
+       def __exit__(self, exc_type, exc_val, exc_tb):
+           self.cleanup()
+
+   class BadResourcePool:
+       def get_resource(self):  # Not managing lifecycle
+           return self._resources.pop()
+
+       def return_resource(self, resource):
+           self._resources.append(resource)  # No cleanup
+   ```
+
+5. **Resource Registration Pattern**
+   ```python
+   from mcp.server.fastmcp import FastMCP
+   from mcp.server.fastmcp.resources import ResourceManager
+
+   app = FastMCP()
+   resource_manager = ResourceManager()
+
+   @app.on_startup
+   async def register_resources():
+       resource_manager.add_resource(
+           TextResource(
+               uri="resource://config/default",
+               text="Default configuration",
+               mime_type="text/plain"
+           )
+       )
+
+   @app.on_shutdown
+   async def cleanup_resources():
+       for resource in resource_manager.list_resources():
+           if hasattr(resource, "cleanup"):
+               await resource.cleanup()
+   ```
+
 ## Examples
 
 <example>
-# Complete Resource Management Implementation
-from mcp.server.fastmcp import FastMCP
+# Complete resource management example
 from pathlib import Path
+from typing import Any
 
-app = FastMCP(name="ResourceDemo")
+from mcp.server.fastmcp import FastMCP
+from mcp.server.fastmcp.resources import ResourceManager, TextResource, FileResource
+from mcp.server.fastmcp.utilities.logging import get_logger
 
-# Static resources
-app.add_resource(TextResource(
-    uri="resource://static/welcome",
-    text="Welcome to the service",
-    mime_type="text/plain"
-))
+logger = get_logger(__name__)
 
-# File resources with proper error handling
-@app.resource("resource://files/{filename}")
-async def serve_file(filename: str) -> FileResource:
-    path = Path("/data/files") / filename
-    if not path.exists():
-        raise ValueError(f"File not found: {filename}")
-    if not path.is_file():
-        raise ValueError(f"Not a file: {filename}")
+app = FastMCP()
+manager = ResourceManager()
+
+# Register resources
+manager.add_resource(
+    TextResource(
+        uri="resource://welcome",
+        text="Welcome to FastMCP",
+        mime_type="text/plain"
+    )
+)
+
+# Resource template
+@manager.add_template(uri_template="resource://files/{filename}")
+async def get_file(filename: str) -> FileResource:
     return FileResource(
         uri=f"resource://files/{filename}",
-        path=path,
-        mime_type="application/octet-stream"
+        path=Path("/data") / filename
     )
 
-# Lazy-loaded expensive resources
-@app.resource("resource://computed/{param}")
-async def compute_resource(param: str) -> FunctionResource:
-    async def compute():
-        result = await expensive_computation(param)
-        return json.dumps(result)
-
-    return FunctionResource(
-        uri=f"resource://computed/{param}",
-        fn=compute,
-        mime_type="application/json"
-    )
+# Error handling
+async def safe_read(uri: str) -> str | bytes:
+    try:
+        resource = await manager.get_resource(uri)
+        return await resource.read()
+    except Exception as e:
+        logger.error("Resource error", extra={"uri": uri, "error": str(e)})
+        raise
 </example>
 
 <example type="invalid">
-# DON'T: Poor Resource Management
-# Missing error handling
-@app.resource("resource://unsafe/{id}")
-def unsafe_resource(id: str):
-    return open(f"/data/{id}").read()  # File handle leak, no error handling
+# DON'T: Incorrect resource patterns
+from fastmcp.resources import *  # Wrong import pattern
+from ..utilities import logger  # Wrong relative import
 
-# DON'T: Inefficient resource loading
-@app.resource("resource://inefficient")
-def inefficient_resource():
-    # Loads all data immediately, blocks server startup
-    return load_entire_database()
+# DON'T: Missing error handling
+async def unsafe_read(uri):
+    resource = manager.get_resource(uri)
+    return await resource.read()
 
-# DON'T: Insecure resource access
-@app.resource("resource://files/{path:path}")
-def insecure_file(path: str):
-    # Path traversal vulnerability
-    return FileResource(path=f"/data/{path}")
+# DON'T: Improper resource cleanup
+@app.on_shutdown
+def cleanup():  # Not async
+    for resource in resources:
+        resource.cleanup()  # Not awaited
 </example>

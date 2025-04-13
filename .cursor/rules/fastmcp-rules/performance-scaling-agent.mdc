@@ -16,7 +16,7 @@ alwaysApply: false
    - Example:
    ```python
    # ✅ Good
-   from fastmcp import FastMCP
+   from mcp.server.fastmcp import FastMCP
    from typing import Any
    import asyncio
    from contextlib import asynccontextmanager
@@ -67,7 +67,7 @@ alwaysApply: false
    - Example:
    ```python
    # ✅ Good
-   from fastmcp import Cache
+   from mcp.server.fastmcp.cache import Cache
    from typing import Any, Optional
    from datetime import timedelta
    import json
@@ -189,7 +189,7 @@ alwaysApply: false
    - Example:
    ```python
    # ✅ Good
-   from fastmcp import ConnectionPool
+   from mcp.server.fastmcp.connections import ConnectionPool
    from typing import AsyncIterator
    from contextlib import asynccontextmanager
 
@@ -312,6 +312,9 @@ from mcp.server.fastmcp import FastMCP
 from mcp.server.fastmcp.cache import Cache, CacheConfig
 from mcp.server.fastmcp.connection import ConnectionPool, ConnectionConfig
 from mcp.server.fastmcp.utilities.logging import get_logger
+from mcp.server.fastmcp.connections import ConnectionPool
+from typing import AsyncIterator
+from contextlib import asynccontextmanager
 
 # Complete Performance Implementation
 from typing import Optional, Dict
