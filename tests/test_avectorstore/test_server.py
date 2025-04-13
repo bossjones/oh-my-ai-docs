@@ -5,10 +5,13 @@ import pytest
 from pytest_mock import MockerFixture
 from pathlib import Path
 from typing import Any, Dict
+from collections.abc import Callable, Mapping
 from collections.abc import Generator
 from mcp.types import TextContent, Tool, ResourceTemplate
 from mcp.server.fastmcp import Context
+from mcp.server.fastmcp.exceptions import ResourceError, ToolError
 from langchain_core.documents import Document
+from pydantic import BaseModel
 
 from oh_my_ai_docs.avectorstore_mcp import (
     mcp,
@@ -17,6 +20,24 @@ from oh_my_ai_docs.avectorstore_mcp import (
     BASE_PATH,
     DOCS_PATH
 )
+
+# Create a mock context class that implements both Pydantic and Mapping interfaces
+class MockContext(BaseModel, Mapping):
+    info: Callable
+    error: Callable
+    report_progress: Callable
+
+    class Config:
+        arbitrary_types_allowed = True
+
+    def __getitem__(self, key: str) -> Any:
+        return getattr(self, key)
+
+    def __iter__(self):
+        return iter(self.__dict__)
+
+    def __len__(self) -> int:
+        return len(self.__dict__)
 
 # Test class for avectorstore MCP server
 class TestAVectorStoreMCPServer:
@@ -41,6 +62,14 @@ class TestAVectorStoreMCPServer:
         mock_ctx.info = mocker.AsyncMock()
         mock_ctx.error = mocker.AsyncMock()
         mock_ctx.report_progress = mocker.AsyncMock()
+
+        # Create a pydantic-compatible context
+        mock_ctx.model_dump = lambda: MockContext(
+            info=mock_ctx.info,
+            error=mock_ctx.error,
+            report_progress=mock_ctx.report_progress
+        ).model_dump()
+
         yield mock_ctx
 
     @pytest.fixture
@@ -122,7 +151,7 @@ class TestAVectorStoreMCPServer:
         assert tool.parameters is not None
 
         # Check parameters structure
-        params = tool.parameters
+        params = tool.parameters.get("properties", {})
         assert "query" in params
         assert "config" in params
         assert params["query"]["type"] == "string"
@@ -142,13 +171,12 @@ class TestAVectorStoreMCPServer:
             mock_vectorstore: Mocked vectorstore
             test_docs_path: Test documentation directory
         """
-        config = QueryConfig(k=3, min_relevance_score=0.0)
-
         result = await mcp._tool_manager.call_tool(
             "query_docs",
             {
                 "query": "test query",
-                "config": config.model_dump()
+                "config": QueryConfig(k=3, min_relevance_score=0.0).model_dump(),
+                "ctx": mock_context
             },
             context=mock_context
         )
@@ -171,13 +199,12 @@ class TestAVectorStoreMCPServer:
         mock_vectorstore: Any
     ) -> None:
         """Test query filtering based on relevance score threshold"""
-        config = QueryConfig(k=3, min_relevance_score=0.98)  # Set high threshold
-
         result = await mcp._tool_manager.call_tool(
             "query_docs",
             {
                 "query": "test query",
-                "config": config.model_dump()
+                "config": QueryConfig(k=3, min_relevance_score=0.98).model_dump(),
+                "ctx": mock_context
             },
             context=mock_context
         )
@@ -198,12 +225,13 @@ class TestAVectorStoreMCPServer:
         # Make retriever.invoke take too long
         mock_vectorstore.return_value.as_retriever.return_value.invoke.side_effect = TimeoutError()
 
-        with pytest.raises(Exception, match="Query operation timed out"):
+        with pytest.raises(ToolError, match="Query operation timed out"):
             await mcp._tool_manager.call_tool(
                 "query_docs",
                 {
                     "query": "test query",
-                    "config": QueryConfig().model_dump()
+                    "config": QueryConfig().model_dump(),
+                    "ctx": mock_context
                 },
                 context=mock_context
             )
@@ -224,5 +252,5 @@ class TestAVectorStoreMCPServer:
     @pytest.mark.anyio
     async def test_get_all_docs_module_mismatch(self) -> None:
         """Test documentation retrieval with mismatched module"""
-        with pytest.raises(ResourceError, match="Requested module 'discord' does not match"):
+        with pytest.raises(ValueError, match="Requested module 'discord' does not match server module 'dpytest'"):
             await mcp._resource_manager.get_resource("docs://discord/full")

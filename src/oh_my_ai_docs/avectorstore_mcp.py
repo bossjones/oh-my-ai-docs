@@ -78,7 +78,12 @@ parser.add_argument(
 )
 parser.add_argument("--debug", action="store_true", help="Enable debug mode with verbose logging")
 
-args = parser.parse_args()
+# Only parse args when run directly
+if __name__ == "__main__":
+    args = parser.parse_args()
+else:
+    # For testing and importing, use default args
+    args = parser.parse_args([])
 
 
 def get_config_info():
@@ -311,18 +316,18 @@ async def get_all_docs(module: str) -> str:
         doc_path = DOCS_PATH / module / f"{module}_docs.txt"
 
         if not doc_path.exists():
-            logger.error("Documentation file not found", extra={"module": module, "path": str(doc_path)})
+            logger.error("Documentation file not found", extra={"doc_module": module, "path": str(doc_path)})
             raise ResourceError(f"Documentation file not found for module: {module}")
 
         async with aiofiles.open(doc_path) as file:
             content = await file.read()
-            logger.info("Successfully read documentation", extra={"module": module, "size": len(content)})
+            logger.info("Successfully read documentation", extra={"doc_module": module, "size": len(content)})
             return content
 
     except ResourceError:
         raise
     except Exception as e:
-        logger.error("Error reading documentation", extra={"module": module, "error": str(e)})
+        logger.error("Error reading documentation", extra={"doc_module": module, "error": str(e)})
         raise ResourceError(f"Error reading documentation file: {e}")
 
 
