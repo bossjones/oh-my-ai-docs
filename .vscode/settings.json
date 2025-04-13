@@ -20,7 +20,8 @@
     },
     "files.associations": {
         "*.cheat": "markdown",
-        "Makefile.ci": "makefile"
+        "Makefile.ci": "makefile",
+        "*.just": "just"
     },
     "pylint.interpreter": [
         "${workspaceFolder}/.venv/bin/python3"
