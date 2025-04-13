@@ -341,151 +341,32 @@ alwaysApply: false
 
 ## Examples
 
-<example>
-# Complete Testing Implementation
-import pytest
-from fastmcp import FastMCP, TestClient, Cache
-from typing import AsyncGenerator, Any
-import structlog
+# Testing and Debugging Examples
+
+# Standard library
+from typing import Optional, Dict, Any
 import asyncio
-from datetime import timedelta
+import pytest
 
-logger = structlog.get_logger()
+# Third-party
+from pydantic import BaseModel
+import httpx
 
-# Test Configuration
-class TestConfig(BaseModel):
-    cache_url: str = "memory://"
-    test_timeout: float = 5.0
-    cleanup_timeout: float = 2.0
+# MCP packages
+from mcp.server.fastmcp import FastMCP
+from mcp.server.fastmcp.testing import TestClient, LoadTester, MockClient
+from mcp.server.fastmcp.cache import Cache, CacheConfig
+from mcp.server.fastmcp.utilities.logging import get_logger
 
-# Test Environment
-class TestEnvironment:
-    def __init__(self, config: TestConfig):
-        self.config = config
-        self.app = FastMCP()
-        self.cache = Cache(config.cache_url)
-        self.test_client = TestClient(self.app)
-        self._debug = DebugContext(logger)
+# Complete Testing Implementation
+import asyncio
+import pytest
+from typing import Optional, Dict
 
-    async def setup(self):
-        with self._debug.operation("test_setup"):
-            await self.app.startup()
-            await self.cache.connect()
+from pydantic import BaseModel
+import httpx
 
-    async def cleanup(self):
-        with self._debug.operation("test_cleanup"):
-            await self.cache.disconnect()
-            await self.app.shutdown()
-
-# Test Fixtures
-@pytest.fixture
-async def test_env(
-    test_config: TestConfig
-) -> AsyncGenerator[TestEnvironment, None]:
-    env = TestEnvironment(test_config)
-    await env.setup()
-    yield env
-    await env.cleanup()
-
-@pytest.fixture
-def error_simulator(test_env: TestEnvironment) -> ErrorSimulator:
-    simulator = ErrorSimulator(test_env.cache)
-    yield simulator
-    simulator.restore()
-
-# Test Cases
-class TestIntegration:
-    @pytest.mark.asyncio
-    async def test_successful_flow(
-        self,
-        test_env: TestEnvironment
-    ):
-        # Arrange
-        data = {"key": "test_value"}
-
-        # Act
-        response = await test_env.test_client.post(
-            "/process",
-            json=data
-        )
-
-        # Assert
-        assert response.status_code == 200
-        result = response.json()
-        assert result["status"] == "success"
-
-        # Verify cache
-        cached = await test_env.cache.get(
-            f"process:{data['key']}"
-        )
-        assert cached is not None
-
-    @pytest.mark.asyncio
-    async def test_error_handling(
-        self,
-        test_env: TestEnvironment,
-        error_simulator: ErrorSimulator
-    ):
-        # Arrange
-        await error_simulator.simulate_error(
-            "get",
-            Exception("Simulated failure")
-        )
-
-        # Act
-        response = await test_env.test_client.get("/data")
-
-        # Assert
-        assert response.status_code == 500
-        error = response.json()
-        assert "error" in error
-
-    @pytest.mark.asyncio
-    async def test_performance(
-        self,
-        test_env: TestEnvironment
-    ):
-        # Arrange
-        perf_test = PerformanceTest(
-            test_env.app,
-            concurrent_users=5,
-            duration=10.0
-        )
-
-        # Act
-        results = await perf_test.run_load_test()
-
-        # Assert
-        assert results["avg_response_time"] < 0.1
-        assert results["p95_response_time"] < 0.2
-</example>
-
-<example type="invalid">
-# Bad Testing Implementation
-class BadTests:
-    def __init__(self):
-        self.app = FastMCP()
-
-    def test_api(self):
-        # No proper setup
-        response = self.app.client.get("/")
-        assert response.status_code == 200
-
-    def test_cache(self):
-        # Global state
-        cache = {}
-        cache["key"] = "value"
-        assert cache["key"] == "value"
-
-    def test_errors(self):
-        try:
-            self.app.process({})
-        except:
-            pass  # Silent failure
-
-    def test_performance(self):
-        start = time.time()
-        self.app.client.get("/")
-        duration = time.time() - start
-        print(f"Duration: {duration}")  # No assertions
-</example>
+from mcp.server.fastmcp import FastMCP
+from mcp.server.fastmcp.testing import TestClient, LoadTester
+from mcp.server.fastmcp.cache import Cache
+from mcp.server.fastmcp.utilities.logging import get_logger

@@ -289,16 +289,36 @@ alwaysApply: false
 
 ## Examples
 
-<example>
-# Complete Security Implementation
-from mcp.server.fastmcp import FastMCP, Security, Request, Response
-from pydantic import BaseModel, SecretStr
+# Security Implementation Examples
+
+# Standard library
 from typing import Optional, Any
 from datetime import datetime, timedelta
-import jwt
-import structlog
 
-logger = structlog.get_logger()
+# Third-party
+from pydantic import BaseModel, SecretStr, validator
+import jwt
+
+# MCP packages
+from mcp.server.fastmcp import FastMCP
+from mcp.server.fastmcp.security import Security, RateLimiter, JWTAuth
+from mcp.server.fastmcp.types import Request, Response
+from mcp.server.fastmcp.middleware import SecurityMiddleware
+from mcp.server.fastmcp.utilities.logging import get_logger
+
+# Complete Security Implementation
+from typing import Optional, Any
+from datetime import datetime, timedelta
+
+from pydantic import BaseModel, SecretStr
+import jwt
+
+from mcp.server.fastmcp import FastMCP
+from mcp.server.fastmcp.security import Security, JWTAuth
+from mcp.server.fastmcp.types import Request, Response
+from mcp.server.fastmcp.utilities.logging import get_logger
+
+logger = get_logger()
 
 # Security Configuration
 class SecurityConfig(BaseModel):
@@ -425,7 +445,6 @@ async def login(request: Request):
             status_code=400,
             content={"error": "Invalid request"}
         )
-</example>
 
 <example type="invalid">
 # Bad Security Implementation

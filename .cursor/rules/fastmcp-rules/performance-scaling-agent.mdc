@@ -296,13 +296,35 @@ alwaysApply: false
 
 ## Examples
 
-<example>
-# Complete Performance Implementation
-from fastmcp import FastMCP, ConnectionPool, Cache
-from typing import Optional, Any
-from datetime import timedelta
+# Performance and Scaling Examples
+
+# Standard library
+from typing import Optional, Dict, Any
 import asyncio
-import structlog
+from datetime import timedelta
+
+# Third-party
+from pydantic import BaseModel, Field
+import redis.asyncio as redis
+
+# MCP packages
+from mcp.server.fastmcp import FastMCP
+from mcp.server.fastmcp.cache import Cache, CacheConfig
+from mcp.server.fastmcp.connection import ConnectionPool, ConnectionConfig
+from mcp.server.fastmcp.utilities.logging import get_logger
+
+# Complete Performance Implementation
+from typing import Optional, Dict
+import asyncio
+from datetime import timedelta
+
+from pydantic import BaseModel, Field
+import redis.asyncio as redis
+
+from mcp.server.fastmcp import FastMCP
+from mcp.server.fastmcp.cache import Cache
+from mcp.server.fastmcp.connection import ConnectionPool
+from mcp.server.fastmcp.utilities.logging import get_logger
 
 logger = structlog.get_logger()
 
@@ -404,7 +426,6 @@ async def process_request(operation_id: str, request: Request):
             status_code=500,
             content={"error": "Processing failed"}
         )
-</example>
 
 <example type="invalid">
 # Bad Performance Implementation

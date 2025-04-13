@@ -289,6 +289,39 @@ alwaysApply: false
 
 ## Examples
 
+# Integration Examples
+
+# Standard library
+from typing import Optional, Any, Dict
+from datetime import datetime
+import json
+
+# Third-party
+from pydantic import BaseModel, Field
+import httpx
+
+# MCP packages
+from mcp.server.fastmcp import FastMCP, Context
+from mcp.server.fastmcp.services import ServiceRegistry, ServiceConfig
+from mcp.server.fastmcp.events import EventBus, Event, EventHandler
+from mcp.server.fastmcp.protocols import Protocol, ProtocolVersion
+from mcp.server.fastmcp.types import Message, MessageSchema
+from mcp.server.fastmcp.utilities.logging import get_logger
+
+# Complete Integration Example
+from typing import Optional, Dict
+from datetime import datetime
+import json
+
+from pydantic import BaseModel, Field
+import httpx
+
+from mcp.server.fastmcp import FastMCP, Context
+from mcp.server.fastmcp.services import ServiceRegistry
+from mcp.server.fastmcp.events import EventBus, Event
+from mcp.server.fastmcp.protocols import Protocol
+from mcp.server.fastmcp.utilities.logging import get_logger
+
 <example>
 # Complete Integration Implementation
 from fastmcp import FastMCP, ServiceRegistry, EventBus, Protocol

@@ -197,6 +197,31 @@ alwaysApply: false
 
 ## Examples
 
+# Tool Development Examples
+
+# Standard library
+from typing import Optional, Dict, Any
+from pathlib import Path
+
+# Third-party
+from pydantic import BaseModel, Field
+
+# MCP packages
+from mcp.server.fastmcp import FastMCP, Context
+from mcp.server.fastmcp.tools import Tool, ToolManager, ToolConfig
+from mcp.server.fastmcp.types import Request, Response
+from mcp.server.fastmcp.utilities.logging import get_logger
+
+# Complete Tool Implementation
+from typing import Optional, Dict
+from pathlib import Path
+
+from pydantic import BaseModel, Field
+
+from mcp.server.fastmcp import FastMCP, Context
+from mcp.server.fastmcp.tools import Tool, ToolManager
+from mcp.server.fastmcp.utilities.logging import get_logger
+
 <example>
 # Complete Tool Implementation Example
 from fastmcp import FastMCP, Context

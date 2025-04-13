@@ -227,6 +227,33 @@ alwaysApply: false
 
 ## Examples
 
+# Context and Session Management Examples
+
+# Standard library
+from typing import Optional, Dict, Any
+from datetime import datetime
+
+# Third-party
+from pydantic import BaseModel, Field
+
+# MCP packages
+from mcp.server.fastmcp import FastMCP, Context
+from mcp.server.fastmcp.session import Session, SessionManager
+from mcp.server.fastmcp.websocket import WebSocket, WebSocketManager
+from mcp.server.fastmcp.types import Message
+from mcp.server.fastmcp.utilities.logging import get_logger
+
+# Complete Context Implementation
+from typing import Optional, Dict
+from datetime import datetime
+
+from pydantic import BaseModel, Field
+
+from mcp.server.fastmcp import FastMCP, Context
+from mcp.server.fastmcp.session import Session, SessionManager
+from mcp.server.fastmcp.websocket import WebSocket
+from mcp.server.fastmcp.utilities.logging import get_logger
+
 <example>
 # Complete Context Management Implementation
 from fastmcp import FastMCP, WebSocket
