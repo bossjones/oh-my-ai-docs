@@ -3,13 +3,19 @@
 import argparse
 import glob
 import json
+import logging
 import os
+from asyncio import timeout
+from contextlib import asynccontextmanager
 from pathlib import Path
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional, TypeVar
 
 from langchain_community.vectorstores import SKLearnVectorStore
 from langchain_openai import OpenAIEmbeddings
-from mcp.server.fastmcp import FastMCP
+from mcp.server.fastmcp import Context, FastMCP
+from pydantic import BaseModel, Field, field_validator
+
+T = TypeVar('T')
 
 # Define common path to the repo locally
 BASE_PATH = Path("/Users/malcolm/dev/bossjones/oh-my-ai-docs")
@@ -118,30 +124,109 @@ def save_mcp_config(config: dict[str, dict[str, Any]]) -> None:
 # Create an MCP server with module name
 mcp = FastMCP(f"{args.module}-docs-mcp-server".lower())
 
+class MCPError(Exception):
+    """Base error class for MCP operations."""
+    pass
+
+class ToolError(MCPError):
+    """Error raised by MCP tools."""
+    pass
+
+# Define validation models
+class QueryConfig(BaseModel):
+    k: int = Field(default=3, ge=1, le=10, description="Number of documents to retrieve")
+    min_relevance_score: float = Field(default=0.0, ge=0.0, le=1.0, description="Minimum relevance score threshold")
+
+    @field_validator('k')
+    @classmethod
+    def validate_k(cls, v: int) -> int:
+        if v > 10:
+            raise ValueError("k cannot be greater than 10 to prevent excessive token usage")
+        return v
+
+class DocumentResponse(BaseModel):
+    documents: list[str]
+    scores: list[float]
+    total_found: int
+
+@asynccontextmanager
+async def vectorstore_session(vectorstore_path: str):
+    """Context manager for vectorstore operations."""
+    try:
+        store = SKLearnVectorStore(
+            embedding=OpenAIEmbeddings(model="text-embedding-3-large"),
+            persist_path=str(vectorstore_path),
+            serializer="parquet"
+        )
+        yield store
+    finally:
+        # Cleanup if needed
+        pass
+
 # Add a tool to query the documentation
 @mcp.tool()
-def query_tool(query: str):
+async def query_tool(
+    query: str,
+    ctx: Context[Any, Any],
+    config: QueryConfig | None = None
+) -> DocumentResponse:
     """
     Query the documentation using a retriever.
 
     Args:
         query (str): The query to search the documentation with
+        ctx (Context[Any, Any]): Tool context for progress reporting
+        config (Optional[QueryConfig], optional): Configuration for the query. Defaults to None.
 
     Returns:
-        str: A str of the retrieved documents
+        DocumentResponse: A structured response containing retrieved documents and metadata
+
+    Raises:
+        ToolError: If the query fails or returns invalid results
+        ValueError: If the query is empty or invalid
     """
+    if not query.strip():
+        raise ValueError("Query cannot be empty")
+
+    config = config or QueryConfig()
     vectorstore_path = DOCS_PATH / args.module / "vectorstore" / f"{args.module}_vectorstore.parquet"
 
-    retriever = SKLearnVectorStore(
-        embedding=OpenAIEmbeddings(model="text-embedding-3-large"),
-        persist_path=str(vectorstore_path),
-        serializer="parquet").as_retriever(search_kwargs={"k": 3}
-        )
+    try:
+        async with timeout(30):  # Prevent hanging on API calls
+            async with vectorstore_session(str(vectorstore_path)) as store:
+                await ctx.info(f"Querying vectorstore with k={config.k}")
 
-    relevant_docs = retriever.invoke(query)
-    print(f"Retrieved {len(relevant_docs)} relevant documents")
-    formatted_context = "\n\n".join([f"==DOCUMENT {i+1}==\n{doc.page_content}" for i, doc in enumerate(relevant_docs)])
-    return formatted_context
+                retriever = store.as_retriever(
+                    search_kwargs={"k": config.k}
+                )
+
+                relevant_docs = retriever.invoke(query)
+
+                await ctx.info(f"Retrieved {len(relevant_docs)} relevant documents")
+
+                documents: list[str] = []
+                scores: list[float] = []
+
+                for i, doc in enumerate(relevant_docs):
+                    if hasattr(doc, 'metadata') and doc.metadata.get('score', 1.0) < config.min_relevance_score:
+                        continue
+
+                    documents.append(doc.page_content)
+                    scores.append(doc.metadata.get('score', 1.0) if hasattr(doc, 'metadata') else 1.0)
+                    await ctx.report_progress(i + 1, len(relevant_docs))
+
+                return DocumentResponse(
+                    documents=documents,
+                    scores=scores,
+                    total_found=len(relevant_docs)
+                )
+
+    except TimeoutError:
+        await ctx.error("Query timed out")
+        raise ToolError("Query operation timed out after 30 seconds")
+    except Exception as e:
+        await ctx.error(f"Query failed: {e!s}")
+        raise ToolError(f"Failed to query vectorstore: {e!s}")
 
 # The @mcp.resource() decorator is meant to map a URI pattern to a function that provides the resource content
 @mcp.resource("docs://{module}/full")
