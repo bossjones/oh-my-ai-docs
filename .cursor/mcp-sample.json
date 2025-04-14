@@ -51,6 +51,17 @@
         "--stdio",
         "--debug"
       ]
+    },
+    "discord-avectorstore-mcp": {
+      "command": "uv",
+      "args": [
+        "run",
+        "./src/oh_my_ai_docs/avectorstore_mcp.py",
+        "--module",
+        "discord",
+        "--stdio",
+        "--debug"
+      ]
     }
   }
 }
