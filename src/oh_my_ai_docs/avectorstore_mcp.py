@@ -12,54 +12,35 @@ from __future__ import annotations
 
 import argparse
 import asyncio
-import glob
 import json
-import logging
 import os
 import sys
+import time
 import traceback
 from asyncio import timeout
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Dict, List, Literal, Optional, Tuple, TypeVar, Union, cast
+from typing import Any, Dict, List, Optional, TypeVar, cast
 
 import aiofiles
-import anyio
 from langchain_community.vectorstores import SKLearnVectorStore
 from langchain_core.documents.base import Document
 from langchain_core.retrievers import BaseRetriever
 from langchain_core.vectorstores import VectorStoreRetriever
 from langchain_openai import OpenAIEmbeddings
-from langchain_text_splitters import CharacterTextSplitter
 from mcp import ClientSession, StdioServerParameters
-from mcp.client.sse import sse_client
-from mcp.client.stdio import stdio_client
 from mcp.server.fastmcp import Context, FastMCP
 from mcp.server.fastmcp.exceptions import ResourceError
 from mcp.server.fastmcp.utilities.logging import get_logger
 from mcp.types import (
-    BlobResourceContents,
-    CallToolResult,
-    ImageContent,
-    ListResourcesResult,
-    ListToolsResult,
-    ReadResourceResult,
-    Resource,
-    ResourceTemplate,
     TextContent,
-    TextResourceContents,
 )
 from pydantic import BaseModel, Field, field_validator
-from pydantic.networks import AnyUrl
-from rich.console import Console
-from rich.panel import Panel
-from rich.syntax import Syntax
-from rich.table import Table
 
-# Configure logging
-# logger = get_logger(__name__)
+# Configure logging - UNCOMMENTED this line
+logger = get_logger(__name__)
 
 T = TypeVar("T")
 
@@ -97,7 +78,7 @@ else:
     args = parser.parse_args([])
 
 
-def get_config_info():
+async def get_config_info():
     """Get configuration information for display"""
     module_path = DOCS_PATH / args.module
     config = {
@@ -118,15 +99,15 @@ def get_config_info():
     return config
 
 
-def list_vectorstores():
+async def list_vectorstores():
     """Search for and list all .parquet files in the docs directory"""
-    # print("\n=== Available Vector Stores ===\n")
+    logger.info("Listing available vector stores")
 
     # Find all .parquet files recursively
     parquet_files: list[Path] = list(DOCS_PATH.glob("**/*.parquet"))
 
     if not parquet_files:
-        # print("No vector stores found.")
+        logger.info("No vector stores found.")
         return
 
     # Group by module
@@ -137,23 +118,23 @@ def list_vectorstores():
             stores_by_module[module_name] = []
         stores_by_module[module_name].append(file)
 
-    # Print the results
+    # Log the results
     for module, files in stores_by_module.items():
-        # print(f"Module: {module}")
+        logger.info(f"Module: {module}")
         for file in files:
             try:
                 relative_path = file.relative_to(BASE_PATH)
             except ValueError:
                 # If file is not under BASE_PATH, show path relative to DOCS_PATH parent
                 relative_path = file.relative_to(DOCS_PATH.parent)
-            # print(f"  - {relative_path}")
-        # print()
+            logger.info(f"  - {relative_path}")
 
-    # print(f"Total vector stores found: {len(parquet_files)}")
+    logger.info(f"Total vector stores found: {len(parquet_files)}")
 
 
-def generate_mcp_config() -> dict[str, dict[str, Any]]:
+async def generate_mcp_config() -> dict[str, dict[str, Any]]:
     """Generate mcp.json configuration for all modules"""
+    logger.info("Generating MCP configuration for all modules")
     modules = ["discord", "dpytest", "langgraph"]
 
     # Get the script path relative to BASE_PATH
@@ -169,23 +150,20 @@ def generate_mcp_config() -> dict[str, dict[str, Any]]:
             "args": ["run", "--directory", str(BASE_PATH), f"./{relative_script_path}", "--module", module],
         }
 
-    # Print the generated config
-    # print("\n=== Generated MCP Configuration ===\n")
-    # print(json.dumps(mcp_config, indent=2))
-
+    logger.info("MCP configuration generated successfully")
     return mcp_config
 
 
-# def save_mcp_config(config: dict[str, dict[str, Any]]) -> None:
-#     """Save the MCP configuration to disk"""
-#     save_path = BASE_PATH / "mcp.json"
-#     with open(save_path, "w") as f:
-#         json.dump(config, indent=2, fp=f)
-#     print(f"\nConfiguration saved to {save_path}")
+async def save_mcp_config(config: dict[str, dict[str, Any]]) -> None:
+    """Save the MCP configuration to disk"""
+    save_path = BASE_PATH / "mcp.json"
+    async with aiofiles.open(save_path, "w") as f:
+        await f.write(json.dumps(config, indent=2))
+    logger.info(f"Configuration saved to {save_path}")
 
 
 # Create an MCP server with module name
-mcp_server = FastMCP("discord-docs-mcp-server".lower())
+mcp_server = FastMCP(f"{args.module}-docs-mcp-server".lower())
 
 
 class MCPError(Exception):
@@ -228,15 +206,20 @@ class AppContext:
 async def vectorstore_session(vectorstore_path: str) -> AsyncIterator[AppContext]:
     """Context manager for vectorstore operations."""
     try:
+        logger.debug(f"Opening vectorstore session: {vectorstore_path}")
         store = SKLearnVectorStore(
             embedding=OpenAIEmbeddings(model="text-embedding-3-large"),
             persist_path=str(vectorstore_path),
             serializer="parquet",
         )
         yield AppContext(store=store)
+        logger.debug("Vectorstore session completed")
+    except Exception as e:
+        logger.error(f"Error in vectorstore session: {e}", exc_info=True)
+        raise
     finally:
         # Cleanup if needed
-        pass
+        logger.debug("Vectorstore session cleanup complete")
 
 
 # Add a tool to query the documentation
@@ -244,7 +227,7 @@ async def vectorstore_session(vectorstore_path: str) -> AsyncIterator[AppContext
     name="query_docs",
     description="Search through module documentation using semantic search to find relevant information based on your query",
 )
-async def query_tool(query: str) -> DocumentResponse:
+async def query_tool(ctx: Context[Any, Any], query: str, config: QueryConfig | None = None) -> DocumentResponse:
     """
     Query the documentation using a retriever.
 
@@ -267,46 +250,45 @@ async def query_tool(query: str) -> DocumentResponse:
         TimeoutError: If the query operation takes longer than 30 seconds
     """
     if not query.strip():
+        await ctx.error("Query cannot be empty")
         raise ValueError("Query cannot be empty")
 
-    config = QueryConfig()
+    if config is None:
+        config = QueryConfig()
+
     vectorstore_path = DOCS_PATH / args.module / "vectorstore" / f"{args.module}_vectorstore.parquet"
-    # store: SKLearnVectorStore = cast(SKLearnVectorStore, ctx.app_context.store)
-    store = SKLearnVectorStore(
-        embedding=OpenAIEmbeddings(model="text-embedding-3-large"),
-        persist_path=str(vectorstore_path),
-        serializer="parquet",
-    )
 
     try:
-        # async with timeout(30):  # Prevent hanging on API calls
-        #     async with vectorstore_session(str(vectorstore_path)) as ctx:
-        # await ctx.info(f"Querying vectorstore with k={config.k}")
+        async with timeout(30):  # Prevent hanging on API calls
+            async with vectorstore_session(str(vectorstore_path)) as app_ctx:
+                await ctx.info(f"Querying vectorstore with k={config.k}")
 
-        retriever: VectorStoreRetriever = store.as_retriever(search_kwargs={"k": config.k})
+                retriever: VectorStoreRetriever = app_ctx.store.as_retriever(search_kwargs={"k": config.k})
 
-        relevant_docs: list[Document] = await asyncio.to_thread(retriever.invoke, query)
+                relevant_docs: list[Document] = await asyncio.to_thread(retriever.invoke, query)
 
-        # await ctx.info(f"Retrieved {len(relevant_docs)} relevant documents")
+                await ctx.info(f"Retrieved {len(relevant_docs)} relevant documents")
 
-        documents: list[str] = []
-        scores: list[float] = []
+                documents: list[str] = []
+                scores: list[float] = []
 
-        for i, doc in enumerate(relevant_docs):
-            if hasattr(doc, "metadata") and doc.metadata.get("score", 1.0) < config.min_relevance_score:
-                continue
+                for i, doc in enumerate(relevant_docs):
+                    if hasattr(doc, "metadata") and doc.metadata.get("score", 1.0) < config.min_relevance_score:
+                        continue
 
-            documents.append(doc.page_content)
-            scores.append(doc.metadata.get("score", 1.0) if hasattr(doc, "metadata") else 1.0)
-            # await ctx.report_progress(i + 1, len(relevant_docs))
+                    documents.append(doc.page_content)
+                    scores.append(doc.metadata.get("score", 1.0) if hasattr(doc, "metadata") else 1.0)
+                    await ctx.report_progress(i + 1, len(relevant_docs))
 
-        return DocumentResponse(documents=documents, scores=scores, total_found=len(relevant_docs))
+                return DocumentResponse(documents=documents, scores=scores, total_found=len(relevant_docs))
 
     except TimeoutError:
-        # await ctx.error("Query timed out")
+        await ctx.error("Query timed out")
+        logger.error("Query operation timed out after 30 seconds")
         raise ToolError("Query operation timed out after 30 seconds")
     except Exception as e:
-        # await ctx.error(f"Query failed: {e!s}")
+        await ctx.error(f"Query failed: {e!s}")
+        logger.error(f"Failed to query vectorstore: {e!s}", exc_info=True)
         raise ToolError(f"Failed to query vectorstore: {e!s}")
 
 
@@ -331,58 +313,59 @@ async def get_all_docs(module: str) -> str:
         ResourceError: If the module doesn't match or if there's an error reading the documentation
     """
     try:
+        logger.info(f"Retrieving documentation for module: {module}")
+
         if module != args.module:
-            # logger.error("Module mismatch", extra={"requested_module": module, "server_module": args.module})
+            logger.error("Module mismatch", extra={"requested_module": module, "server_module": args.module})
             raise ResourceError(f"Requested module '{module}' does not match server module '{args.module}'")
 
         # Local path to the documentation
         doc_path = DOCS_PATH / module / f"{module}_docs.txt"
 
         if not doc_path.exists():
-            # logger.error("Documentation file not found", extra={"doc_module": module, "path": str(doc_path)})
+            logger.error("Documentation file not found", extra={"doc_module": module, "path": str(doc_path)})
             raise ResourceError(f"Documentation file not found for module: {module}")
 
         async with aiofiles.open(doc_path) as file:
             content = await file.read()
-            # logger.info("Successfully read documentation", extra={"doc_module": module, "size": len(content)})
+            logger.info("Successfully read documentation", extra={"doc_module": module, "size": len(content)})
             return content
 
     except ResourceError:
         raise
     except Exception as e:
-        # logger.error("Error reading documentation", extra={"doc_module": module, "error": str(e)})
+        logger.error("Error reading documentation", extra={"doc_module": module, "error": str(e)}, exc_info=True)
         raise ResourceError(f"Error reading documentation file: {e}")
 
 
 if __name__ == "__main__":
     import asyncio
 
-    # # Configure logging based on debug flag
-    # if args.debug:
-    #     logging.basicConfig(level=logging.DEBUG)
-    #     logger.setLevel(logging.DEBUG)
-    # else:
-    #     # In stdio mode, disable all output except through the MCP protocol
-    #     if args.stdio:
-    #         logging.basicConfig(level=logging.ERROR)
-    #         logger.setLevel(logging.ERROR)
-    #     else:
-    #         logging.basicConfig(level=logging.INFO)
-    #         logger.setLevel(logging.INFO)
+    # async def main():
+    try:
+        if args.list_vectorstores:
+            # await list_vectorstores()
+            logger.info("Vectorstore listing completed")
+        # elif args.generate_mcp_config:
+        #     config = await generate_mcp_config()
+        #     if args.save:
+        #         await save_mcp_config(config)
+        # elif args.dry_run:
+        #     config = await get_config_info()
+        #     logger.info("MCP Server Configuration:")
+        #     logger.info(json.dumps(config, indent=2))
+        #     logger.info("Dry run completed. Use without --dry-run to start the server.")
+        else:
+            # Initialize and run the server
+            logger.info(f"Starting MCP server for {args.module} documentation...")
+            mcp_server.run(transport="stdio")
+    except Exception as e:
+        logger.error(f"Error in main execution: {e}", exc_info=True)
+        # sys.exit(1)
+        # except Exception as e:
+        logger.error(f"Error starting server: {e}")
+        traceback.print_exc(file=sys.stderr)
+        sys.exit(1)
 
-    if args.list_vectorstores:
-        list_vectorstores()
-    elif args.generate_mcp_config:
-        config = generate_mcp_config()
-        # if args.save:
-        #     save_mcp_config(config)
-    elif args.dry_run:
-        config = get_config_info()
-        # print("\n=== MCP Server Configuration ===\n")
-        # print(json.dumps(config, indent=2))
-        # print("\nDry run completed. Use without --dry-run to start the server.")
-    else:
-        # Initialize and run the server
-        # if not args.stdio:
-        #     print(f"Starting MCP server for {args.module} documentation...")
-        mcp_server.run(transport="stdio")
+    # Run the main async function
+    # asyncio.run(main())

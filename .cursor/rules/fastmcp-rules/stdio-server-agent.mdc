@@ -1,0 +1,148 @@
+---
+description: This rule governs the implementation of FastMCP stdio servers. It should be applied whenever: (1) Creating a new FastMCP stdio server, (2) Modifying existing stdio server implementations, (3) Implementing I/O handling in FastMCP servers, (4) Setting up logging for stdio servers, or (5) Implementing error handling in stdio servers. The rule ensures consistent server implementation, proper I/O management, and robust error handling across all FastMCP stdio server implementations.
+globs:
+alwaysApply: false
+---
+
+# FastMCP Stdio Server Standards
+
+## Critical Rules
+
+- NEVER mix synchronous and asynchronous I/O:
+  * Use `asyncio.StreamReader/StreamWriter` for async I/O
+  * Avoid direct `sys.stdin/stdout` calls in async functions
+  * Use `aiofiles` for async file operations
+  * Ensure all I/O operations are non-blocking
+
+- NEVER use print() or direct stdout writes:
+  * Use MCP's logging utilities (`get_logger()`)
+  * Configure logging through MCP's logging system
+  * Disable all direct stdout/stderr output in stdio mode
+  * Use context.info/error for progress reporting
+
+- ALWAYS handle I/O errors properly:
+  * Catch and handle `BlockingIOError`
+  * Handle `EOFError` for closed streams
+  * Implement proper cleanup in error cases
+  * Use try/finally blocks for resource cleanup
+
+- ALWAYS separate concerns:
+  * Keep I/O handling separate from business logic
+  * Use dependency injection for I/O dependencies
+  * Create testable abstractions for I/O operations
+  * Implement proper resource management
+
+- NEVER trust raw input:
+  * Validate all incoming data
+  * Implement proper input sanitization
+  * Use strong typing with Pydantic models
+  * Handle malformed input gracefully
+
+- ALWAYS implement proper logging:
+  * Use structured logging
+  * Include relevant context in log messages
+  * Configure appropriate log levels
+  * Ensure logs don't interfere with stdio protocol
+
+- ALWAYS follow FastMCP protocol:
+  * Use proper message framing
+  * Implement correct message serialization
+  * Handle protocol errors gracefully
+  * Maintain protocol version compatibility
+
+## Examples
+
+<example>
+# Good - Proper FastMCP Stdio Server Implementation
+```python
+from mcp import FastMCP
+from mcp.server.fastmcp.utilities.logging import get_logger
+
+logger = get_logger(__name__)
+
+# Create server with proper name
+mcp_server = FastMCP("my-stdio-server")
+
+@mcp_server.tool()
+async def my_tool(ctx: Context, input_data: str) -> str:
+    try:
+        # Use proper logging
+        await ctx.info("Processing input")
+
+        # Validate input
+        if not input_data.strip():
+            raise ValueError("Empty input")
+
+        # Process with proper error handling
+        result = await process_data(input_data)
+
+        # Report progress
+        await ctx.info("Processing complete")
+        return result
+
+    except ValueError as e:
+        await ctx.error(f"Invalid input: {e}")
+        raise
+    except Exception as e:
+        logger.error("Unexpected error", exc_info=True)
+        raise
+
+if __name__ == "__main__":
+    # Proper server initialization
+    mcp_server.run(transport="stdio")
+```
+
+# Good - Resource Management
+```python
+@asynccontextmanager
+async def managed_resource():
+    try:
+        resource = await setup_resource()
+        yield resource
+    finally:
+        await cleanup_resource(resource)
+
+async def handle_request(ctx: Context):
+    async with managed_resource() as resource:
+        await ctx.info("Processing with managed resource")
+        return await process_with_resource(resource)
+```
+</example>
+
+<example type="invalid">
+# Bad - Improper I/O and Error Handling
+```python
+# DON'T: Mix sync/async I/O
+@mcp_server.tool()
+async def bad_tool():
+    # Bad: Using print in async context
+    print("Processing...")
+
+    # Bad: Synchronous file I/O
+    with open("data.txt") as f:
+        data = f.read()
+
+    # Bad: No error handling
+    result = process_data(data)
+
+    # Bad: Direct stdout usage
+    sys.stdout.write(result)
+
+# DON'T: Skip proper resource management
+async def unsafe_resource_usage():
+    # Bad: No cleanup guaranteed
+    resource = setup_resource()
+    return process_with_resource(resource)
+
+# DON'T: Use unstructured logging
+def bad_logging():
+    # Bad: Using print for logging
+    print("Error occurred")
+
+    # Bad: Unstructured error handling
+    try:
+        process()
+    except Exception as e:
+        print(f"Failed: {e}")
+```
+</example>
