@@ -40,6 +40,17 @@
         "--host",
         "localhost"
       ]
+    },
+    "dpytest-vectorstore-mcp": {
+      "command": "uv",
+      "args": [
+        "run",
+        "./scripts/vectorstore_mcp.py",
+        "--module",
+        "dpytest",
+        "--stdio",
+        "--debug"
+      ]
     }
   }
 }

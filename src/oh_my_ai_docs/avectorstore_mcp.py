@@ -59,7 +59,7 @@ from rich.syntax import Syntax
 from rich.table import Table
 
 # Configure logging
-logger = get_logger(__name__)
+# logger = get_logger(__name__)
 
 T = TypeVar("T")
 
@@ -120,13 +120,13 @@ def get_config_info():
 
 def list_vectorstores():
     """Search for and list all .parquet files in the docs directory"""
-    print("\n=== Available Vector Stores ===\n")
+    # print("\n=== Available Vector Stores ===\n")
 
     # Find all .parquet files recursively
     parquet_files: list[Path] = list(DOCS_PATH.glob("**/*.parquet"))
 
     if not parquet_files:
-        print("No vector stores found.")
+        # print("No vector stores found.")
         return
 
     # Group by module
@@ -139,17 +139,17 @@ def list_vectorstores():
 
     # Print the results
     for module, files in stores_by_module.items():
-        print(f"Module: {module}")
+        # print(f"Module: {module}")
         for file in files:
             try:
                 relative_path = file.relative_to(BASE_PATH)
             except ValueError:
                 # If file is not under BASE_PATH, show path relative to DOCS_PATH parent
                 relative_path = file.relative_to(DOCS_PATH.parent)
-            print(f"  - {relative_path}")
-        print()
+            # print(f"  - {relative_path}")
+        # print()
 
-    print(f"Total vector stores found: {len(parquet_files)}")
+    # print(f"Total vector stores found: {len(parquet_files)}")
 
 
 def generate_mcp_config() -> dict[str, dict[str, Any]]:
@@ -170,22 +170,22 @@ def generate_mcp_config() -> dict[str, dict[str, Any]]:
         }
 
     # Print the generated config
-    print("\n=== Generated MCP Configuration ===\n")
-    print(json.dumps(mcp_config, indent=2))
+    # print("\n=== Generated MCP Configuration ===\n")
+    # print(json.dumps(mcp_config, indent=2))
 
     return mcp_config
 
 
-def save_mcp_config(config: dict[str, dict[str, Any]]) -> None:
-    """Save the MCP configuration to disk"""
-    save_path = BASE_PATH / "mcp.json"
-    with open(save_path, "w") as f:
-        json.dump(config, indent=2, fp=f)
-    print(f"\nConfiguration saved to {save_path}")
+# def save_mcp_config(config: dict[str, dict[str, Any]]) -> None:
+#     """Save the MCP configuration to disk"""
+#     save_path = BASE_PATH / "mcp.json"
+#     with open(save_path, "w") as f:
+#         json.dump(config, indent=2, fp=f)
+#     print(f"\nConfiguration saved to {save_path}")
 
 
 # Create an MCP server with module name
-mcp_server = FastMCP(f"{args.module}-docs-mcp-server".lower())
+mcp_server = FastMCP("discord-docs-mcp-server".lower())
 
 
 class MCPError(Exception):
@@ -244,7 +244,7 @@ async def vectorstore_session(vectorstore_path: str) -> AsyncIterator[AppContext
     name="query_docs",
     description="Search through module documentation using semantic search to find relevant information based on your query",
 )
-async def query_tool(query: str, ctx: Context[Any, Any], config: QueryConfig | None = None) -> DocumentResponse:
+async def query_tool(query: str) -> DocumentResponse:
     """
     Query the documentation using a retriever.
 
@@ -269,20 +269,25 @@ async def query_tool(query: str, ctx: Context[Any, Any], config: QueryConfig | N
     if not query.strip():
         raise ValueError("Query cannot be empty")
 
-    config = config or QueryConfig()
+    config = QueryConfig()
     vectorstore_path = DOCS_PATH / args.module / "vectorstore" / f"{args.module}_vectorstore.parquet"
-    store: SKLearnVectorStore = cast(SKLearnVectorStore, ctx.app_context.store)
+    # store: SKLearnVectorStore = cast(SKLearnVectorStore, ctx.app_context.store)
+    store = SKLearnVectorStore(
+        embedding=OpenAIEmbeddings(model="text-embedding-3-large"),
+        persist_path=str(vectorstore_path),
+        serializer="parquet",
+    )
 
     try:
         # async with timeout(30):  # Prevent hanging on API calls
         #     async with vectorstore_session(str(vectorstore_path)) as ctx:
-        await ctx.info(f"Querying vectorstore with k={config.k}")
+        # await ctx.info(f"Querying vectorstore with k={config.k}")
 
         retriever: VectorStoreRetriever = store.as_retriever(search_kwargs={"k": config.k})
 
         relevant_docs: list[Document] = await asyncio.to_thread(retriever.invoke, query)
 
-        await ctx.info(f"Retrieved {len(relevant_docs)} relevant documents")
+        # await ctx.info(f"Retrieved {len(relevant_docs)} relevant documents")
 
         documents: list[str] = []
         scores: list[float] = []
@@ -293,15 +298,15 @@ async def query_tool(query: str, ctx: Context[Any, Any], config: QueryConfig | N
 
             documents.append(doc.page_content)
             scores.append(doc.metadata.get("score", 1.0) if hasattr(doc, "metadata") else 1.0)
-            await ctx.report_progress(i + 1, len(relevant_docs))
+            # await ctx.report_progress(i + 1, len(relevant_docs))
 
         return DocumentResponse(documents=documents, scores=scores, total_found=len(relevant_docs))
 
     except TimeoutError:
-        await ctx.error("Query timed out")
+        # await ctx.error("Query timed out")
         raise ToolError("Query operation timed out after 30 seconds")
     except Exception as e:
-        await ctx.error(f"Query failed: {e!s}")
+        # await ctx.error(f"Query failed: {e!s}")
         raise ToolError(f"Failed to query vectorstore: {e!s}")
 
 
@@ -327,57 +332,57 @@ async def get_all_docs(module: str) -> str:
     """
     try:
         if module != args.module:
-            logger.error("Module mismatch", extra={"requested_module": module, "server_module": args.module})
+            # logger.error("Module mismatch", extra={"requested_module": module, "server_module": args.module})
             raise ResourceError(f"Requested module '{module}' does not match server module '{args.module}'")
 
         # Local path to the documentation
         doc_path = DOCS_PATH / module / f"{module}_docs.txt"
 
         if not doc_path.exists():
-            logger.error("Documentation file not found", extra={"doc_module": module, "path": str(doc_path)})
+            # logger.error("Documentation file not found", extra={"doc_module": module, "path": str(doc_path)})
             raise ResourceError(f"Documentation file not found for module: {module}")
 
         async with aiofiles.open(doc_path) as file:
             content = await file.read()
-            logger.info("Successfully read documentation", extra={"doc_module": module, "size": len(content)})
+            # logger.info("Successfully read documentation", extra={"doc_module": module, "size": len(content)})
             return content
 
     except ResourceError:
         raise
     except Exception as e:
-        logger.error("Error reading documentation", extra={"doc_module": module, "error": str(e)})
+        # logger.error("Error reading documentation", extra={"doc_module": module, "error": str(e)})
         raise ResourceError(f"Error reading documentation file: {e}")
 
 
 if __name__ == "__main__":
     import asyncio
 
-    # Configure logging based on debug flag
-    if args.debug:
-        logging.basicConfig(level=logging.DEBUG)
-        logger.setLevel(logging.DEBUG)
-    else:
-        # In stdio mode, disable all output except through the MCP protocol
-        if args.stdio:
-            logging.basicConfig(level=logging.ERROR)
-            logger.setLevel(logging.ERROR)
-        else:
-            logging.basicConfig(level=logging.INFO)
-            logger.setLevel(logging.INFO)
+    # # Configure logging based on debug flag
+    # if args.debug:
+    #     logging.basicConfig(level=logging.DEBUG)
+    #     logger.setLevel(logging.DEBUG)
+    # else:
+    #     # In stdio mode, disable all output except through the MCP protocol
+    #     if args.stdio:
+    #         logging.basicConfig(level=logging.ERROR)
+    #         logger.setLevel(logging.ERROR)
+    #     else:
+    #         logging.basicConfig(level=logging.INFO)
+    #         logger.setLevel(logging.INFO)
 
     if args.list_vectorstores:
         list_vectorstores()
     elif args.generate_mcp_config:
         config = generate_mcp_config()
-        if args.save:
-            save_mcp_config(config)
+        # if args.save:
+        #     save_mcp_config(config)
     elif args.dry_run:
         config = get_config_info()
-        print("\n=== MCP Server Configuration ===\n")
-        print(json.dumps(config, indent=2))
-        print("\nDry run completed. Use without --dry-run to start the server.")
+        # print("\n=== MCP Server Configuration ===\n")
+        # print(json.dumps(config, indent=2))
+        # print("\nDry run completed. Use without --dry-run to start the server.")
     else:
         # Initialize and run the server
-        if not args.stdio:
-            print(f"Starting MCP server for {args.module} documentation...")
+        # if not args.stdio:
+        #     print(f"Starting MCP server for {args.module} documentation...")
         mcp_server.run(transport="stdio")
