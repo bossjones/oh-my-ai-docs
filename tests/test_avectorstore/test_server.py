@@ -11,8 +11,8 @@ import pytest
 from pytest_mock import MockerFixture, AsyncMockType, MockType
 from pathlib import Path
 from typing import Any, Dict, TypeVar, cast, Optional
-from collections.abc import Awaitable, Mapping
-from collections.abc import Callable, Generator
+from collections.abc import Callable, Awaitable
+from collections.abc import Generator
 from mcp.types import TextContent, Tool, ResourceTemplate, Resource
 from mcp.server.fastmcp.resources.base import Resource as FunctionResource
 from mcp.server.fastmcp import Context
@@ -104,9 +104,9 @@ class TestAVectorStoreMCPServer:
             Generator yielding mocked Context with Any types
         """
         # Create AsyncMock objects for the async methods
-        info_mock: mocker.AsyncMock = mocker.AsyncMock(name="info")
-        error_mock: mocker.AsyncMock = mocker.AsyncMock(name="error")
-        progress_mock: mocker.AsyncMock = mocker.AsyncMock(name="report_progress")
+        info_mock: AsyncMockType = mocker.AsyncMock(name="info")
+        error_mock: AsyncMockType = mocker.AsyncMock(name="error")
+        progress_mock: AsyncMockType = mocker.AsyncMock(name="report_progress")
 
         # Create app context with store
         app_context = mocker.MagicMock()
@@ -123,7 +123,7 @@ class TestAVectorStoreMCPServer:
         yield mock_ctx
 
     @pytest.fixture
-    def mock_vectorstore(self, mocker: MockerFixture) -> Generator[Any, None, None]:
+    def mock_vectorstore(self, mocker: MockerFixture) -> Generator[MockType, None, None]:
         """
         Fixture providing a mocked SKLearnVectorStore.
 
@@ -239,8 +239,8 @@ class TestAVectorStoreMCPServer:
         assert result.total_found == 1
 
         # Verify context method calls
-        mock_info = cast(mocker.AsyncMock, mock_context.info_fn)
-        mock_progress = cast(mocker.AsyncMock, mock_context.report_progress_fn)
+        mock_info = cast(AsyncMockType, mock_context.info_fn)
+        mock_progress = cast(AsyncMockType, mock_context.report_progress_fn)
 
         assert mock_info.await_count >= 2
         assert mock_info.await_args_list[0][0][0] == "Querying vectorstore with k=3"
@@ -293,7 +293,7 @@ class TestAVectorStoreMCPServer:
             )
 
         # Verify error was logged
-        mock_error = cast(mocker.AsyncMock, mock_context.error_fn)
+        mock_error = cast(AsyncMockType, mock_context.error_fn)
         assert mock_error.await_count == 1
         assert mock_error.await_args_list[0][0][0] == "Query timed out"
 
@@ -303,13 +303,13 @@ class TestAVectorStoreMCPServer:
         test_docs_path: Path
     ) -> None:
         """Test successful documentation retrieval"""
-        resource = await mcp_server._resource_manager.get_resource("docs://dpytest/full")
+        resource: FunctionResource | None = await mcp_server._resource_manager.get_resource("docs://dpytest/full")
 
         # Verify we got a Resource
         assert isinstance(resource, FunctionResource)
 
         # Get the actual content by calling the resource function
-        content: str = resource.fn()
+        content: str = resource.fn()  # type: ignore[no-any-return]
         assert isinstance(content, str)
         assert content == "Test documentation content"
 

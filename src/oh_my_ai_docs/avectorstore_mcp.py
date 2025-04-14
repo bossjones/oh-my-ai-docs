@@ -30,7 +30,9 @@ import anyio
 from langchain_community.vectorstores import SKLearnVectorStore
 from langchain_core.documents.base import Document
 from langchain_core.retrievers import BaseRetriever
+from langchain_core.vectorstores import VectorStoreRetriever
 from langchain_openai import OpenAIEmbeddings
+from langchain_text_splitters import CharacterTextSplitter
 from mcp import ClientSession, StdioServerParameters
 from mcp.client.sse import sse_client
 from mcp.client.stdio import stdio_client
@@ -269,16 +271,16 @@ async def query_tool(query: str, ctx: Context[Any, Any], config: QueryConfig | N
 
     config = config or QueryConfig()
     vectorstore_path = DOCS_PATH / args.module / "vectorstore" / f"{args.module}_vectorstore.parquet"
-    store: SKLearnVectorStore = ctx.app_context.store
+    store: SKLearnVectorStore = cast(SKLearnVectorStore, ctx.app_context.store)
 
     try:
         # async with timeout(30):  # Prevent hanging on API calls
         #     async with vectorstore_session(str(vectorstore_path)) as ctx:
         await ctx.info(f"Querying vectorstore with k={config.k}")
 
-        retriever: BaseRetriever = store.as_retriever(search_kwargs={"k": config.k})
+        retriever: VectorStoreRetriever = store.as_retriever(search_kwargs={"k": config.k})
 
-        relevant_docs: list[Document] = retriever.invoke(query)
+        relevant_docs: list[Document] = await asyncio.to_thread(retriever.invoke, query)
 
         await ctx.info(f"Retrieved {len(relevant_docs)} relevant documents")
 

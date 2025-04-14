@@ -103,6 +103,7 @@
         "fastparquet>=2024.11.0",
         "files-to-prompt>=0.4",
         "langchain-anthropic>=0.3.10",
+        "langchain-community>=0.3.21",
         "langchain-core>=0.3.51",
         "langchain-openai>=0.3.12",
         "langchain>=0.3.23",
