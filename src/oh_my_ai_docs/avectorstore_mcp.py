@@ -169,7 +169,7 @@ def save_mcp_config(config: dict[str, dict[str, Any]]) -> None:
 
 
 # Create an MCP server with module name
-mcp = FastMCP(f"{args.module}-docs-mcp-server".lower())
+mcp_server = FastMCP(f"{args.module}-docs-mcp-server".lower())
 
 # # Option 2: Run with STDIO transport
 # async def start_server_stdio():
@@ -223,7 +223,7 @@ async def vectorstore_session(vectorstore_path: str):
 
 
 # Add a tool to query the documentation
-@mcp.tool(
+@mcp_server.tool(
     name="query_docs",
     description="Search through module documentation using semantic search to find relevant information based on your query",
 )
@@ -287,7 +287,7 @@ async def query_tool(query: str, ctx: Context[Any, Any], config: QueryConfig | N
         raise ToolError(f"Failed to query vectorstore: {e!s}")
 
 
-@mcp.resource(
+@mcp_server.resource(
     uri="docs://{module}/full",
     name="module_documentation",
     description="Retrieves the full documentation content for a specified module (discord, dpytest, or langgraph). Returns the raw text content from the module's documentation file.",
@@ -362,4 +362,4 @@ if __name__ == "__main__":
         # Initialize and run the server
         if not args.stdio:
             print(f"Starting MCP server for {args.module} documentation...")
-        mcp.run(transport="stdio")
+        mcp_server.run(transport="stdio")

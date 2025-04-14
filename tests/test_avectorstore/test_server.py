@@ -1,12 +1,18 @@
 #!/usr/bin/env python3
+# pyright: reportMissingImports=false
+# pyright: reportUnusedVariable=warning
+# pyright: reportUntypedBaseClass=error
+# pyright: reportGeneralTypeIssues=false
+# pyright: reportAttributeAccessIssue=false
+# pyright: reportInvalidTypeForm=false
 from __future__ import annotations
 
 import pytest
 from pytest_mock import MockerFixture
 from pathlib import Path
-from typing import Any, Dict
-from collections.abc import Callable, Mapping
-from collections.abc import Generator
+from typing import Any, Dict, TypeVar, cast
+from collections.abc import Awaitable, Mapping
+from collections.abc import Callable, Generator
 from mcp.types import TextContent, Tool, ResourceTemplate
 from mcp.server.fastmcp import Context
 from mcp.server.fastmcp.exceptions import ResourceError, ToolError
@@ -14,7 +20,7 @@ from langchain_core.documents import Document
 from pydantic import BaseModel
 
 from oh_my_ai_docs.avectorstore_mcp import (
-    mcp,
+    mcp_server,
     QueryConfig,
     DocumentResponse,
     BASE_PATH,
@@ -22,10 +28,10 @@ from oh_my_ai_docs.avectorstore_mcp import (
 )
 
 # Create a mock context class that implements both Pydantic and Mapping interfaces
-class MockContext(BaseModel, Mapping):
-    info: Callable
-    error: Callable
-    report_progress: Callable
+class MockContext(BaseModel, Mapping[str, Any]):
+    info: Callable[[str], Awaitable[None]]
+    error: Callable[[str], Awaitable[None]]
+    report_progress: Callable[[int, int], Awaitable[None]]
 
     class Config:
         arbitrary_types_allowed = True
@@ -59,15 +65,22 @@ class TestAVectorStoreMCPServer:
             Generator yielding mocked Context with Any types
         """
         mock_ctx = mocker.MagicMock(spec=Context)
-        mock_ctx.info = mocker.AsyncMock()
-        mock_ctx.error = mocker.AsyncMock()
-        mock_ctx.report_progress = mocker.AsyncMock()
+
+        # Create AsyncMock objects for the async methods
+        info_mock = mocker.AsyncMock(name="info")
+        error_mock = mocker.AsyncMock(name="error")
+        progress_mock = mocker.AsyncMock(name="report_progress")
+
+        # Assign the mocks to the context
+        mock_ctx.info = info_mock
+        mock_ctx.error = error_mock
+        mock_ctx.report_progress = progress_mock
 
         # Create a pydantic-compatible context
         mock_ctx.model_dump = lambda: MockContext(
-            info=mock_ctx.info,
-            error=mock_ctx.error,
-            report_progress=mock_ctx.report_progress
+            info=info_mock,
+            error=error_mock,
+            report_progress=progress_mock
         ).model_dump()
 
         yield mock_ctx
@@ -136,12 +149,12 @@ class TestAVectorStoreMCPServer:
     @pytest.mark.anyio
     async def test_server_initialization(self) -> None:
         """Test that the MCP server is initialized with correct default name"""
-        assert mcp.name == "dpytest-docs-mcp-server"
+        assert mcp_server.name == "dpytest-docs-mcp-server"
 
     @pytest.mark.anyio
     async def test_query_tool_registration(self) -> None:
         """Test that query_docs tool is properly registered with correct parameters"""
-        tools = mcp._tool_manager.list_tools()
+        tools = mcp_server._tool_manager.list_tools()
 
         assert len(tools) == 1
         tool = tools[0]
@@ -159,6 +172,7 @@ class TestAVectorStoreMCPServer:
     @pytest.mark.anyio
     async def test_successful_query(
         self,
+        mocker: MockerFixture,
         mock_context: Context[Any, Any],
         mock_vectorstore: Any,
         test_docs_path: Path
@@ -171,7 +185,7 @@ class TestAVectorStoreMCPServer:
             mock_vectorstore: Mocked vectorstore
             test_docs_path: Test documentation directory
         """
-        result = await mcp._tool_manager.call_tool(
+        result = await mcp_server._tool_manager.call_tool(
             "query_docs",
             {
                 "query": "test query",
@@ -187,10 +201,15 @@ class TestAVectorStoreMCPServer:
         assert result.scores[0] == 0.95
         assert result.total_found == 1
 
-        # Verify context method calls
-        mock_context.info.assert_any_call("Querying vectorstore with k=3")
-        mock_context.info.assert_any_call("Retrieved 1 relevant documents")
-        mock_context.report_progress.assert_called_once_with(1, 1)
+        # Verify context method calls using mock assertions
+        mock_info = cast(mocker.AsyncMock, mock_context.info)
+        mock_progress = cast(mocker.AsyncMock, mock_context.report_progress)
+
+        assert mock_info.await_count >= 2
+        assert mock_info.await_args_list[0][0][0] == "Querying vectorstore with k=3"
+        assert mock_info.await_args_list[1][0][0] == "Retrieved 1 relevant documents"
+        assert mock_progress.await_count == 1
+        assert mock_progress.await_args_list[0][0] == (1, 1)
 
     @pytest.mark.anyio
     async def test_query_with_low_relevance_threshold(
@@ -199,7 +218,7 @@ class TestAVectorStoreMCPServer:
         mock_vectorstore: Any
     ) -> None:
         """Test query filtering based on relevance score threshold"""
-        result = await mcp._tool_manager.call_tool(
+        result = await mcp_server._tool_manager.call_tool(
             "query_docs",
             {
                 "query": "test query",
@@ -226,7 +245,7 @@ class TestAVectorStoreMCPServer:
         mock_vectorstore.return_value.as_retriever.return_value.invoke.side_effect = TimeoutError()
 
         with pytest.raises(ToolError, match="Query operation timed out"):
-            await mcp._tool_manager.call_tool(
+            await mcp_server._tool_manager.call_tool(
                 "query_docs",
                 {
                     "query": "test query",
@@ -236,7 +255,10 @@ class TestAVectorStoreMCPServer:
                 context=mock_context
             )
 
-        mock_context.error.assert_called_once_with("Query timed out")
+        # Verify error was logged
+        mock_error = cast(mocker.AsyncMock, mock_context.error)
+        assert mock_error.await_count == 1
+        assert mock_error.await_args_list[0][0][0] == "Query timed out"
 
     @pytest.mark.anyio
     async def test_get_all_docs_success(
@@ -244,7 +266,7 @@ class TestAVectorStoreMCPServer:
         test_docs_path: Path
     ) -> None:
         """Test successful documentation retrieval"""
-        content = await mcp._resource_manager.get_resource("docs://dpytest/full")
+        content = await mcp_server._resource_manager.get_resource("docs://dpytest/full")
 
         assert isinstance(content, str)
         assert content == "Test documentation content"
@@ -253,4 +275,4 @@ class TestAVectorStoreMCPServer:
     async def test_get_all_docs_module_mismatch(self) -> None:
         """Test documentation retrieval with mismatched module"""
         with pytest.raises(ValueError, match="Requested module 'discord' does not match server module 'dpytest'"):
-            await mcp._resource_manager.get_resource("docs://discord/full")
+            await mcp_server._resource_manager.get_resource("docs://discord/full")
