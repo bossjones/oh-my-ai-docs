@@ -15,11 +15,16 @@ from collections.abc import Callable, Awaitable
 from collections.abc import Generator
 from mcp.types import TextContent, Tool, ResourceTemplate, Resource
 from mcp.server.fastmcp.resources.base import Resource as FunctionResource
-from mcp.server.fastmcp import Context
+from mcp.server.fastmcp import FastMCP
+from mcp.shared.memory import (
+    create_connected_server_and_client_session as client_session,
+)
 from mcp.server.fastmcp.exceptions import ResourceError, ToolError
 from langchain_core.documents import Document
 from pydantic import BaseModel, Field
 import json
+from tests.fake_embeddings import FakeEmbeddings
+from langchain_community.vectorstores import SKLearnVectorStore
 
 from oh_my_ai_docs.avectorstore_mcp import (
     mcp_server,
@@ -29,60 +34,6 @@ from oh_my_ai_docs.avectorstore_mcp import (
     DOCS_PATH
 )
 
-# Create a mock context class that extends the actual Context class
-class MockContext(Context[Any, Any]):
-    """Mock context for testing that extends the actual Context class."""
-
-    info_fn: Callable[[str], Awaitable[None]] | None = Field(default=None)
-    error_fn: Callable[[str], Awaitable[None]] | None = Field(default=None)
-    report_progress_fn: Callable[[int, int], Awaitable[None]] | None = Field(default=None)
-    app_context: Any = Field(default=None)
-    mock_request_id: str = Field(default="test-request-id")
-
-    @property
-    def request_id(self) -> str:
-        """Override request_id to avoid request context dependency."""
-        return self.mock_request_id
-
-    async def info(self, message: str) -> None:
-        """Send info message."""
-        if self.info_fn is not None:
-            await self.info_fn(message)
-
-    async def error(self, message: str) -> None:
-        """Send error message."""
-        if self.error_fn is not None:
-            await self.error_fn(message)
-
-    async def report_progress(self, current: int, total: int) -> None:
-        """Report progress."""
-        if self.report_progress_fn is not None:
-            await self.report_progress_fn(current, total)
-
-    def model_dump(self) -> dict[str, Any]:
-        """Override model_dump to include our custom attributes."""
-        # Access model_fields from the class instead of instance
-        return {
-            "info": self.info_fn,
-            "error": self.error_fn,
-            "report_progress": self.report_progress_fn,
-            "app_context": self.app_context,
-            "request_id": self.request_id
-        }
-
-    @classmethod
-    def create(cls, info: Callable[[str], Awaitable[None]],
-             error: Callable[[str], Awaitable[None]],
-             report_progress: Callable[[int, int], Awaitable[None]],
-             app_context: Any = None) -> MockContext:
-        """Factory method to create MockContext instance."""
-        return cls(
-            info_fn=info,
-            error_fn=error,
-            report_progress_fn=report_progress,
-            app_context=app_context
-        )
-
 # Test class for avectorstore MCP server
 class TestAVectorStoreMCPServer:
     """
@@ -91,67 +42,29 @@ class TestAVectorStoreMCPServer:
     """
 
     @pytest.fixture
-    def mock_context(self, mocker: MockerFixture, mock_vectorstore: Any) -> Generator[Context[Any, Any], None, None]:
+    def real_vectorstore(self, tmp_path: Path) -> Generator[SKLearnVectorStore, None, None]:
         """
-        Fixture providing a mocked MCP Context for testing.
+        Fixture providing a real SKLearnVectorStore with FakeEmbeddings.
 
-        Scope: function - ensures test isolation
+        Scope: function - ensures fresh vectorstore for each test
         Args:
-            mocker: pytest-mock fixture for creating mocks
-            mock_vectorstore: Mocked vectorstore fixture
+            tmp_path: pytest fixture providing temporary directory
 
         Returns:
-            Generator yielding mocked Context with Any types
+            Generator yielding vectorstore
         """
-        # Create AsyncMock objects for the async methods
-        info_mock: AsyncMockType = mocker.AsyncMock(name="info")
-        error_mock: AsyncMockType = mocker.AsyncMock(name="error")
-        progress_mock: AsyncMockType = mocker.AsyncMock(name="report_progress")
+        # Create test documents
+        texts = ["Test content", "Another test", "Final test"]
+        metadatas = [{"score": 0.95}, {"score": 0.85}, {"score": 0.75}]
 
-        # Create app context with store
-        app_context = mocker.MagicMock()
-        app_context.store = mock_vectorstore.return_value
-
-        # Create a context using the factory method
-        mock_ctx = MockContext.create(
-            info=info_mock,
-            error=error_mock,
-            report_progress=progress_mock,
-            app_context=app_context
+        # Initialize vectorstore with FakeEmbeddings
+        store = SKLearnVectorStore.from_texts(
+            texts=texts,
+            embedding=FakeEmbeddings(),
+            metadatas=metadatas,
         )
 
-        yield mock_ctx
-
-    @pytest.fixture
-    def mock_vectorstore(self, mocker: MockerFixture) -> Generator[MockType, None, None]:
-        """
-        Fixture providing a mocked SKLearnVectorStore.
-
-        Scope: function - ensures fresh mock for each test
-        Args:
-            mocker: pytest-mock fixture
-
-        Returns:
-            Generator yielding mocked vectorstore
-        Cleanup: Automatically handled by pytest-mock
-        """
-        mock_store = mocker.patch(
-            "oh_my_ai_docs.avectorstore_mcp.SKLearnVectorStore",
-            autospec=True
-        )
-
-        # Setup mock retriever behavior
-        mock_retriever = mocker.MagicMock()
-        mock_store.return_value.as_retriever.return_value = mock_retriever
-
-        # Setup default document return
-        mock_doc = Document(
-            page_content="Test content",
-            metadata={"score": 0.95}
-        )
-        mock_retriever.invoke.return_value = [mock_doc]
-
-        yield mock_store
+        yield store
 
     @pytest.fixture
     def test_docs_path(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Generator[Path, None, None]:
@@ -203,97 +116,139 @@ class TestAVectorStoreMCPServer:
         # Check parameters structure
         params = tool.parameters.get("properties", {})
         assert "query" in params
-        # assert "config" in params
         assert params["query"]["type"] == "string"
 
     @pytest.mark.anyio
     async def test_successful_query(
         self,
-        mocker: MockerFixture,
-        mock_context: Context[Any, Any],
-        mock_vectorstore: Any,
+        real_vectorstore: SKLearnVectorStore,
         test_docs_path: Path
     ) -> None:
         """
         Test successful query execution through the server.
 
         Args:
-            mock_context: Mocked MCP context
-            mock_vectorstore: Mocked vectorstore
+            real_vectorstore: Real vectorstore with test data
             test_docs_path: Test documentation directory
         """
-        result = await mcp_server._tool_manager.call_tool(
-            "query_docs",
-            {
-                "query": "test query",
-            },
-            context=mock_context
-        )
+        # Capture log messages and progress updates
+        log_messages = []
+        progress_updates = []
 
-        assert isinstance(result, DocumentResponse)
-        assert len(result.documents) == 1
-        assert result.documents[0] == "Test content"
-        assert result.scores[0] == 0.95
-        assert result.total_found == 1
+        async with client_session(mcp_server._mcp_server) as client:
+            # Set up callbacks
+            async def log_callback(level: str, message: str, logger: str = None) -> None:
+                log_messages.append((level, message))
 
-        # Verify context method calls
-        mock_info = cast(AsyncMockType, mock_context.info_fn)
-        mock_progress = cast(AsyncMockType, mock_context.report_progress_fn)
+            async def progress_callback(progress: int, total: int) -> None:
+                progress_updates.append((progress, total))
 
-        assert mock_info.await_count >= 2
-        assert mock_info.await_args_list[0][0][0] == "Querying vectorstore with k=3"
-        assert mock_info.await_args_list[1][0][0] == "Retrieved 1 relevant documents"
-        assert mock_progress.await_count == 1
-        assert mock_progress.await_args_list[0][0] == (1, 1)
+            # Register callbacks
+            client.session.on_log_message = log_callback
+            client.session.on_progress = progress_callback
+
+            # Patch the vectorstore in the server
+            mcp_server._vectorstore = real_vectorstore
+
+            result = await client.call_tool(
+                "query_docs",
+                {
+                    "query": "test query",
+                }
+            )
+
+            assert isinstance(result.content[0], TextContent)
+            content = result.content[0]
+            response = DocumentResponse.model_validate_json(content.text)
+
+            assert len(response.documents) == 1
+            assert response.documents[0] == "Test content"
+            assert response.scores[0] == 0.95
+            assert response.total_found == 1
+
+            # Verify log messages
+            info_logs = [msg for level, msg in log_messages if level == "info"]
+            assert len(info_logs) >= 2
+            assert "Querying vectorstore with k=3" in info_logs[0]
+            assert "Retrieved 1 relevant documents" in info_logs[1]
+
+            # Verify progress updates
+            assert len(progress_updates) == 1
+            assert progress_updates[0] == (1, 1)
 
     @pytest.mark.anyio
     async def test_query_with_low_relevance_threshold(
         self,
-        mock_context: Context[Any, Any],
-        mock_vectorstore: Any
+        real_vectorstore: SKLearnVectorStore
     ) -> None:
         """Test query filtering based on relevance score threshold"""
-        result = await mcp_server._tool_manager.call_tool(
-            "query_docs",
-            {
-                "query": "test query",
-                "config": QueryConfig(k=3, min_relevance_score=0.98).model_dump(),
-                "ctx": mock_context
-            },
-            context=mock_context
-        )
+        log_messages = []
 
-        assert isinstance(result, DocumentResponse)
-        assert len(result.documents) == 0  # Should filter out doc with score 0.95
-        assert len(result.scores) == 0
-        assert result.total_found == 1
+        async with client_session(mcp_server._mcp_server) as client:
+            # Set up logging callback
+            async def log_callback(level: str, message: str, logger: str = None) -> None:
+                log_messages.append((level, message))
+
+            client.session.on_log_message = log_callback
+
+            # Patch the vectorstore in the server
+            mcp_server._vectorstore = real_vectorstore
+
+            result = await client.call_tool(
+                "query_docs",
+                {
+                    "query": "test query",
+                    "config": QueryConfig(k=3, min_relevance_score=0.98).model_dump()
+                }
+            )
+
+            assert isinstance(result.content[0], TextContent)
+            content = result.content[0]
+            response = DocumentResponse.model_validate_json(content.text)
+
+            assert len(response.documents) == 0  # Should filter out doc with score 0.95
+            assert len(response.scores) == 0
+            assert response.total_found == 1
 
     @pytest.mark.anyio
     async def test_query_timeout(
         self,
-        mock_context: Context[Any, Any],
-        mock_vectorstore: Any,
+        real_vectorstore: SKLearnVectorStore,
         mocker: MockerFixture
     ) -> None:
         """Test query timeout handling"""
         # Make retriever.invoke take too long
-        mock_vectorstore.return_value.as_retriever.return_value.invoke.side_effect = TimeoutError()
+        mocker.patch.object(
+            real_vectorstore.as_retriever(),
+            'invoke',
+            side_effect=TimeoutError()
+        )
 
-        with pytest.raises(ToolError, match="Query operation timed out"):
-            await mcp_server._tool_manager.call_tool(
-                "query_docs",
-                {
-                    "query": "test query",
-                    "config": QueryConfig().model_dump(),
-                    "ctx": mock_context
-                },
-                context=mock_context
-            )
+        log_messages = []
 
-        # Verify error was logged
-        mock_error = cast(AsyncMockType, mock_context.error_fn)
-        assert mock_error.await_count == 1
-        assert mock_error.await_args_list[0][0][0] == "Query timed out"
+        async with client_session(mcp_server._mcp_server) as client:
+            # Set up logging callback
+            async def log_callback(level: str, message: str, logger: str = None) -> None:
+                log_messages.append((level, message))
+
+            client.session.on_log_message = log_callback
+
+            # Patch the vectorstore in the server
+            mcp_server._vectorstore = real_vectorstore
+
+            with pytest.raises(ToolError, match="Query operation timed out"):
+                await client.call_tool(
+                    "query_docs",
+                    {
+                        "query": "test query",
+                        "config": QueryConfig().model_dump()
+                    }
+                )
+
+            # Verify error was logged
+            error_logs = [msg for level, msg in log_messages if level == "error"]
+            assert len(error_logs) == 1
+            assert "Query timed out" in error_logs[0]
 
     @pytest.mark.anyio
     async def test_get_all_docs_success(
@@ -488,34 +443,43 @@ class TestAVectorStoreMCPServer:
             assert saved_config == test_config
 
     @pytest.mark.anyio
-    async def test_vectorstore_session_cleanup(self, mock_context: Context[Any, Any], mock_vectorstore: Any) -> None:
+    async def test_vectorstore_session_cleanup(self, test_docs_path: Path) -> None:
         """Test vectorstore session cleanup"""
         from oh_my_ai_docs.avectorstore_mcp import vectorstore_session, DOCS_PATH
 
-        vectorstore_path = DOCS_PATH / "test" / "vectorstore" / "test_vectorstore.parquet"
+        # Create a test vectorstore file
+        vectorstore_path = test_docs_path / "vectorstore" / "test_vectorstore.parquet"
+        vectorstore_path.parent.mkdir(exist_ok=True)
+
+        # Create a real vectorstore and save it
+        store = SKLearnVectorStore.from_texts(
+            texts=["Test content"],
+            embedding=FakeEmbeddings(),
+            metadatas=[{"score": 0.95}],
+        )
+        store.save_local(str(vectorstore_path))
 
         async with vectorstore_session(str(vectorstore_path)) as session:
-            assert isinstance(session.store, mock_vectorstore.return_value.__class__)
-
-        # Verify cleanup (mock_vectorstore cleanup would be called if implemented)
-        mock_vectorstore.assert_called_once()
+            assert isinstance(session.store, SKLearnVectorStore)
+            # Test basic functionality
+            results = await session.store.asimilarity_search("test", k=1)
+            assert len(results) == 1
+            assert results[0].page_content == "Test content"
 
     @pytest.mark.anyio
-    async def test_query_empty_query(self, mock_context: Context[Any, Any]) -> None:
+    async def test_query_empty_query(self) -> None:
         """Test query handling with empty query string"""
-        with pytest.raises(ToolError, match="Query cannot be empty"):
-            await mcp_server._tool_manager.call_tool(
-                "query_docs",
-                {
-                    "query": "   ",  # Empty query with whitespace
-                    # "config": QueryConfig().model_dump(),
-                    # "ctx": mock_context
-                },
-                context=mock_context
-            )
+        async with client_session(mcp_server._mcp_server) as client:
+            with pytest.raises(ToolError, match="Query cannot be empty"):
+                await client.call_tool(
+                    "query_docs",
+                    {
+                        "query": "   ",  # Empty query with whitespace
+                    }
+                )
 
     @pytest.mark.anyio
-    async def test_query_invalid_k(self, mock_context: Context[Any, Any]) -> None:
+    async def test_query_invalid_k(self) -> None:
         """Test query config validation with invalid k value"""
         with pytest.raises(ValueError, match="Input should be less than or equal to 10"):
             QueryConfig(k=11)
@@ -528,3 +492,120 @@ class TestAVectorStoreMCPServer:
 
         with pytest.raises(ValueError, match="Error creating resource from template: Documentation file not found for module: dpytest"):
             await mcp_server._resource_manager.get_resource("docs://dpytest/full")
+
+    @pytest.mark.anyio
+    async def test_context_logging_comprehensive(
+        self,
+        real_vectorstore: SKLearnVectorStore,
+        test_docs_path: Path,
+        mocker: MockerFixture
+    ) -> None:
+        """Test comprehensive logging across all server functionality."""
+
+        # Mock the send_log_message method
+        mock_log = mocker.patch("mcp.server.session.ServerSession.send_log_message")
+
+        async with client_session(mcp_server._mcp_server) as client:
+            # Patch the vectorstore in the server
+            mcp_server._vectorstore = real_vectorstore
+
+            # Test 1: Empty query should trigger error log
+            with pytest.raises(ValueError, match="Query cannot be empty"):
+                await client.call_tool(
+                    "query_docs",
+                    {
+                        "query": "   ",  # Empty query with whitespace
+                    }
+                )
+
+            # Verify error log for empty query
+            mock_log.assert_any_call(
+                level="error",
+                data="Query cannot be empty",
+                logger=None
+            )
+
+            # Reset mock for next test
+            mock_log.reset_mock()
+
+            # Test 2: Successful query should have debug, info logs
+            result = await client.call_tool(
+                "query_docs",
+                {
+                    "query": "test query",
+                }
+            )
+
+            # Verify logs for successful query
+            mock_log.assert_any_call(
+                level="debug",
+                data=mocker.ANY,  # State will be dynamic
+                logger=None
+            )
+            mock_log.assert_any_call(
+                level="info",
+                data="Querying vectorstore with k=3",
+                logger=None
+            )
+            mock_log.assert_any_call(
+                level="info",
+                data=mocker.ANY,  # Number of docs will be dynamic
+                logger=None
+            )
+
+            mock_log.reset_mock()
+
+            # Test 3: Documentation retrieval with module mismatch
+            with pytest.raises(ResourceError, match="Requested module 'discord' does not match server module 'dpytest'"):
+                await mcp_server._resource_manager.get_resource("docs://discord/full")
+
+            # Verify error log for module mismatch
+            mock_log.assert_any_call(
+                level="error",
+                data="Module mismatch",
+                logger=None,
+                extra={"requested_module": "discord", "server_module": "dpytest"}
+            )
+
+            mock_log.reset_mock()
+
+            # Test 4: Successful documentation retrieval
+            resource = await mcp_server._resource_manager.get_resource("docs://dpytest/full")
+            content = resource.fn()  # type: ignore[no-any-return]
+
+            # Verify info logs for successful doc retrieval
+            mock_log.assert_any_call(
+                level="info",
+                data="Retrieving documentation for module: dpytest",
+                logger=None
+            )
+            mock_log.assert_any_call(
+                level="info",
+                data="Successfully read documentation",
+                logger=None,
+                extra={"doc_module": "dpytest", "size": mocker.ANY}
+            )
+
+            mock_log.reset_mock()
+
+            # Test 5: Query timeout scenario
+            mocker.patch.object(
+                real_vectorstore.as_retriever(),
+                'invoke',
+                side_effect=TimeoutError()
+            )
+
+            with pytest.raises(ToolError, match="Query operation timed out"):
+                await client.call_tool(
+                    "query_docs",
+                    {
+                        "query": "test query",
+                    }
+                )
+
+            # Verify error log for timeout
+            mock_log.assert_any_call(
+                level="error",
+                data="Query timed out",
+                logger=None
+            )

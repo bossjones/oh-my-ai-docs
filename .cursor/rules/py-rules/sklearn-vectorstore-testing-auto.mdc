@@ -1,0 +1,115 @@
+---
+description:
+globs: tests/**/*test*.py
+alwaysApply: false
+---
+# SKLearnVectorStore Testing Standards
+
+## Critical Rules
+
+- ALWAYS include @pytest.mark.requires("numpy", "sklearn") for SKLearnVectorStore tests
+- ALWAYS use FakeEmbeddings() for testing to avoid real embedding API calls
+- Test coverage MUST include:
+  * Basic similarity search functionality
+  * Metadata handling and persistence
+  * Relevance scores when applicable
+  * MMR search functionality
+  * Vector-based search methods
+  * Edge cases with empty or invalid inputs
+
+- Test Structure Requirements:
+  * Each test function MUST have a clear docstring explaining the test purpose
+  * Use descriptive test names that indicate the functionality being tested
+  * Group related test assertions logically
+  * Verify both content and metadata in search results
+  * Include appropriate k and fetch_k parameters in search tests
+
+- Persistence Testing:
+  * Test with different serializers (json, pickle, etc.)
+  * Verify data integrity after persistence
+  * Clean up temporary files after tests
+  * Use pytest's tmpdir fixture for temporary storage
+
+- Search Result Validation:
+  * Verify correct number of results returned
+  * Check result ordering when relevant
+  * Validate metadata preservation
+  * Assert expected similarity scores
+  * Verify MMR diversity when testing max_marginal_relevance_search
+
+- Error Handling:
+  * Test invalid input handling
+  * Verify appropriate error messages
+  * Test edge cases with empty or None values
+  * Validate parameter boundary conditions
+
+## Examples
+
+<example>
+```python
+@pytest.mark.requires("numpy", "sklearn")
+def test_sklearn_search_with_validation() -> None:
+    """Test similarity search with comprehensive validation."""
+    texts = ["foo", "bar", "baz"]
+    metadatas = [{"page": str(i)} for i in range(len(texts))]
+
+    docsearch = SKLearnVectorStore.from_texts(
+        texts,
+        FakeEmbeddings(),
+        metadatas=metadatas,
+    )
+
+    # Test basic search
+    results = docsearch.similarity_search("foo", k=2)
+    assert len(results) == 2
+    assert results[0].page_content == "foo"
+    assert results[0].metadata["page"] == "0"
+
+    # Test with scores
+    scored_results = docsearch.similarity_search_with_relevance_scores("foo", k=2)
+    assert len(scored_results) == 2
+    doc, score = scored_results[0]
+    assert doc.page_content == "foo"
+    assert 0 <= score <= 1
+
+    # Test MMR search
+    mmr_results = docsearch.max_marginal_relevance_search(
+        "foo", k=2, fetch_k=3
+    )
+    assert len(mmr_results) == 2
+    assert mmr_results[0].page_content == "foo"
+```
+</example>
+
+<example type="invalid">
+```python
+# Missing required decorator
+def test_sklearn_basic():
+    """Test is missing required pytest mark."""
+    store = SKLearnVectorStore.from_texts(["test"], embeddings)
+
+# Poor test structure
+@pytest.mark.requires("numpy", "sklearn")
+def test_search():
+    # Missing docstring
+    # Using real embeddings instead of FakeEmbeddings
+    store = SKLearnVectorStore.from_texts(
+        ["test"],
+        OpenAIEmbeddings()
+    )
+    # Single assertion without proper validation
+    assert len(store.similarity_search("test")) > 0
+
+# Incomplete validation
+@pytest.mark.requires("numpy", "sklearn")
+def test_incomplete():
+    """Missing key validations."""
+    store = SKLearnVectorStore.from_texts(
+        ["test"],
+        FakeEmbeddings()
+    )
+    # Only checking length, not content or metadata
+    results = store.similarity_search("test")
+    assert len(results) == 1
+```
+</example>

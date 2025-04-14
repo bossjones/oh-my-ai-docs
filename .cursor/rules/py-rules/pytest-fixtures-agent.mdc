@@ -1,9 +1,10 @@
 ---
 description: "This rule governs pytest fixture management and organization. It should be applied whenever: (1) Creating new test files or fixtures, (2) Modifying existing fixtures, (3) Using fixtures in tests, or (4) Reviewing test code. This ensures consistent fixture management, prevents duplication, and maintains clear test organization."
-globs: tests/**/*.py
+globs:
 alwaysApply: false
 ---
 
+# globs: tests/**/*.py
 # Pytest Fixture Management Standards
 
 ## Critical Rules

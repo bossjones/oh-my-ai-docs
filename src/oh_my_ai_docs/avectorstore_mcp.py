@@ -7,6 +7,7 @@
 # pyright: reportGeneralTypeIssues=false
 # pyright: reportAttributeAccessIssue=false
 # pyright: reportInvalidTypeForm=false
+# pyright: reportUnusedVariable=false
 
 from __future__ import annotations
 

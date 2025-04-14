@@ -129,6 +129,11 @@
             "name": "loguru",
             "depth": 5,
             "includeAllSymbols": true
+        },
+        {
+            "name": "pytest",
+            "depth": 5,
+            "includeAllSymbols": true
         }
     ],
     "python.analysis.extraPaths": [
