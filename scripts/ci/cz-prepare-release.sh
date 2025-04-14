@@ -106,6 +106,7 @@ if [ -n "${PRERELEASE_PHASE}" ]; then
     esac
 fi
 
+echo "[running] uv run cz bump ${PRERELEASE_ARG}"
 uv run cz bump ${PRERELEASE_ARG} || {
     echo "❌ Version bump failed"
     echo "Possible reasons:"
@@ -115,6 +116,7 @@ uv run cz bump ${PRERELEASE_ARG} || {
 }
 
 echo "===== RUNNING PRE-COMMIT HOOKS ====="
+echo "[running] uv run pre-commit run -a --show-diff-on-failure"
 uv run pre-commit run -a --show-diff-on-failure || {
     echo "❌ Pre-commit checks failed - resolve formatting issues and retry"
     echo "Some fixes may have been applied automatically - check git diff"
@@ -123,6 +125,7 @@ uv run pre-commit run -a --show-diff-on-failure || {
 
 echo "===== CHANGE VERIFICATION ====="
 # Verify changes after pre-commit fixes
+echo "[running] git diff --name-only"
 if [ -z "$(git diff --name-only)" ]; then
     echo "❌ No files changed after version bump and pre-commit"
     echo "Check Commitizen configuration and commit history"
@@ -130,7 +133,9 @@ if [ -z "$(git diff --name-only)" ]; then
 fi
 
 echo "===== COMMIT SAFEGUARDS ====="
+echo "[running] git add ."
 git add .
+echo "[running] git diff --cached --quiet"
 if ! git diff --cached --quiet; then
     echo "-- Committing version changes --"
     git commit -m "chore: bump version from ${CURRENT_VERSION} to ${VERSION}"
