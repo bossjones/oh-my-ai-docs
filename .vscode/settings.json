@@ -147,5 +147,15 @@
         "tag:yaml.org,2002:python/name:pymdownx.superfences.fence_code_format",
         "tag:yaml.org,2002:python/name:mermaid2.fence_mermaid_custom",
         "tag:yaml.org,2002:python/object/apply:pymdownx.slugs.slugify mapping"
-    ]
+    ],
+    "python.testing.unittestEnabled": false,
+    "python.testing.pytestEnabled": true,
+    "python.testing.pytestArgs": [
+        "-s",
+        "--verbose",
+        "--showlocals",
+        "--tb=short",
+        "tests"
+    ],
+    "python.testing.cwd": "tests" // optional: set working directory for tests
 }

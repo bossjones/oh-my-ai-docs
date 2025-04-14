@@ -40,13 +40,37 @@ from mcp.types import (
 from pydantic import BaseModel, Field, field_validator
 
 # Configure logging - UNCOMMENTED this line
-logger = get_logger(__name__)
+# logger = get_logger(__name__)
 
 T = TypeVar("T")
 
 # Define common path to the repo locally
 BASE_PATH = Path("/Users/malcolm/dev/bossjones/oh-my-ai-docs")
 DOCS_PATH = BASE_PATH / "docs/ai_docs"
+
+
+class MCPError(Exception):
+    """Base error class for MCP operations."""
+
+    pass
+
+
+class ToolError(MCPError):
+    """Error raised by MCP tools."""
+
+    pass
+
+
+class DocumentResponse(BaseModel):
+    documents: list[str]
+    scores: list[float]
+    total_found: int
+
+
+@dataclass
+class AppContext:
+    store: SKLearnVectorStore
+
 
 # Create argument parser
 parser = argparse.ArgumentParser(description="MCP Server for vectorstore queries")
@@ -101,13 +125,13 @@ async def get_config_info():
 
 async def list_vectorstores():
     """Search for and list all .parquet files in the docs directory"""
-    logger.info("Listing available vector stores")
+    # logger.info("Listing available vector stores")
 
     # Find all .parquet files recursively
     parquet_files: list[Path] = list(DOCS_PATH.glob("**/*.parquet"))
 
     if not parquet_files:
-        logger.info("No vector stores found.")
+        # logger.info("No vector stores found.")
         return
 
     # Group by module
@@ -120,21 +144,21 @@ async def list_vectorstores():
 
     # Log the results
     for module, files in stores_by_module.items():
-        logger.info(f"Module: {module}")
+        # logger.info(f"Module: {module}")
         for file in files:
             try:
                 relative_path = file.relative_to(BASE_PATH)
             except ValueError:
                 # If file is not under BASE_PATH, show path relative to DOCS_PATH parent
                 relative_path = file.relative_to(DOCS_PATH.parent)
-            logger.info(f"  - {relative_path}")
+            # logger.info(f"  - {relative_path}")
 
-    logger.info(f"Total vector stores found: {len(parquet_files)}")
+    # logger.info(f"Total vector stores found: {len(parquet_files)}")
 
 
 async def generate_mcp_config() -> dict[str, dict[str, Any]]:
     """Generate mcp.json configuration for all modules"""
-    logger.info("Generating MCP configuration for all modules")
+    # logger.info("Generating MCP configuration for all modules")
     modules = ["discord", "dpytest", "langgraph"]
 
     # Get the script path relative to BASE_PATH
@@ -150,7 +174,7 @@ async def generate_mcp_config() -> dict[str, dict[str, Any]]:
             "args": ["run", "--directory", str(BASE_PATH), f"./{relative_script_path}", "--module", module],
         }
 
-    logger.info("MCP configuration generated successfully")
+    # logger.info("MCP configuration generated successfully")
     return mcp_config
 
 
@@ -159,23 +183,7 @@ async def save_mcp_config(config: dict[str, dict[str, Any]]) -> None:
     save_path = BASE_PATH / "mcp.json"
     async with aiofiles.open(save_path, "w") as f:
         await f.write(json.dumps(config, indent=2))
-    logger.info(f"Configuration saved to {save_path}")
-
-
-# Create an MCP server with module name
-mcp_server = FastMCP(f"{args.module}-docs-mcp-server".lower())
-
-
-class MCPError(Exception):
-    """Base error class for MCP operations."""
-
-    pass
-
-
-class ToolError(MCPError):
-    """Error raised by MCP tools."""
-
-    pass
+    # logger.info(f"Configuration saved to {save_path}")
 
 
 # Define validation models
@@ -191,35 +199,34 @@ class QueryConfig(BaseModel):
         return v
 
 
-class DocumentResponse(BaseModel):
-    documents: list[str]
-    scores: list[float]
-    total_found: int
-
-
-@dataclass
-class AppContext:
-    store: SKLearnVectorStore
+def get_vectorstore_path():
+    return DOCS_PATH / args.module / "vectorstore" / f"{args.module}_vectorstore.parquet"
 
 
 @asynccontextmanager
-async def vectorstore_session(vectorstore_path: str) -> AsyncIterator[AppContext]:
+async def vectorstore_session(server: FastMCP) -> AsyncIterator[AppContext]:
     """Context manager for vectorstore operations."""
+    vectorstore_path = get_vectorstore_path()
     try:
-        logger.debug(f"Opening vectorstore session: {vectorstore_path}")
+        # logger.debug(f"Opening vectorstore session: {vectorstore_path}")
         store = SKLearnVectorStore(
             embedding=OpenAIEmbeddings(model="text-embedding-3-large"),
             persist_path=str(vectorstore_path),
             serializer="parquet",
         )
         yield AppContext(store=store)
-        logger.debug("Vectorstore session completed")
+        # logger.debug("Vectorstore session completed")
     except Exception as e:
-        logger.error(f"Error in vectorstore session: {e}", exc_info=True)
+        # logger.error(f"Error in vectorstore session: {e}", exc_info=True)
         raise
     finally:
         # Cleanup if needed
-        logger.debug("Vectorstore session cleanup complete")
+        # logger.debug("Vectorstore session cleanup complete")
+        pass
+
+
+# Create an MCP server with module name
+mcp_server = FastMCP(f"{args.module}-docs-mcp-server".lower(), lifespan=vectorstore_session)
 
 
 # Add a tool to query the documentation
@@ -227,7 +234,7 @@ async def vectorstore_session(vectorstore_path: str) -> AsyncIterator[AppContext
     name="query_docs",
     description="Search through module documentation using semantic search to find relevant information based on your query",
 )
-async def query_tool(ctx: Context[Any, Any], query: str, config: QueryConfig | None = None) -> DocumentResponse:
+async def query_tool(query: str) -> DocumentResponse:
     """
     Query the documentation using a retriever.
 
@@ -249,46 +256,50 @@ async def query_tool(ctx: Context[Any, Any], query: str, config: QueryConfig | N
         ValueError: If the query string is empty or invalid
         TimeoutError: If the query operation takes longer than 30 seconds
     """
+    ctx = mcp_server.request_context()
     if not query.strip():
         await ctx.error("Query cannot be empty")
         raise ValueError("Query cannot be empty")
 
-    if config is None:
-        config = QueryConfig()
+    config = QueryConfig()
 
     vectorstore_path = DOCS_PATH / args.module / "vectorstore" / f"{args.module}_vectorstore.parquet"
 
+    state: AppContext = cast(AppContext, ctx.request_context.lifespan_context)
+    await ctx.debug(f"state: {state}")
+
     try:
-        async with timeout(30):  # Prevent hanging on API calls
-            async with vectorstore_session(str(vectorstore_path)) as app_ctx:
-                await ctx.info(f"Querying vectorstore with k={config.k}")
+        # async with timeout(30):  # Prevent hanging on API calls
+        #     async with vectorstore_session(str(vectorstore_path)) as app_ctx:
+        await ctx.info(f"Querying vectorstore with k={config.k}")
 
-                retriever: VectorStoreRetriever = app_ctx.store.as_retriever(search_kwargs={"k": config.k})
+        # import bpdb; bpdb.set_trace()
+        retriever: VectorStoreRetriever = state.as_retriever(search_kwargs={"k": config.k})
 
-                relevant_docs: list[Document] = await asyncio.to_thread(retriever.invoke, query)
+        relevant_docs: list[Document] = await asyncio.to_thread(retriever.invoke, query)
 
-                await ctx.info(f"Retrieved {len(relevant_docs)} relevant documents")
+        await ctx.info(f"Retrieved {len(relevant_docs)} relevant documents")
 
-                documents: list[str] = []
-                scores: list[float] = []
+        documents: list[str] = []
+        scores: list[float] = []
 
-                for i, doc in enumerate(relevant_docs):
-                    if hasattr(doc, "metadata") and doc.metadata.get("score", 1.0) < config.min_relevance_score:
-                        continue
+        for i, doc in enumerate(relevant_docs):
+            if hasattr(doc, "metadata") and doc.metadata.get("score", 1.0) < config.min_relevance_score:
+                continue
 
-                    documents.append(doc.page_content)
-                    scores.append(doc.metadata.get("score", 1.0) if hasattr(doc, "metadata") else 1.0)
-                    await ctx.report_progress(i + 1, len(relevant_docs))
+            documents.append(doc.page_content)
+            scores.append(doc.metadata.get("score", 1.0) if hasattr(doc, "metadata") else 1.0)
+            await ctx.report_progress(i + 1, len(relevant_docs))
 
-                return DocumentResponse(documents=documents, scores=scores, total_found=len(relevant_docs))
+        return DocumentResponse(documents=documents, scores=scores, total_found=len(relevant_docs))
 
     except TimeoutError:
         await ctx.error("Query timed out")
-        logger.error("Query operation timed out after 30 seconds")
+        # logger.error("Query operation timed out after 30 seconds")
         raise ToolError("Query operation timed out after 30 seconds")
     except Exception as e:
         await ctx.error(f"Query failed: {e!s}")
-        logger.error(f"Failed to query vectorstore: {e!s}", exc_info=True)
+        # logger.error(f"Failed to query vectorstore: {e!s}", exc_info=True)
         raise ToolError(f"Failed to query vectorstore: {e!s}")
 
 
@@ -312,29 +323,31 @@ async def get_all_docs(module: str) -> str:
     Raises:
         ResourceError: If the module doesn't match or if there's an error reading the documentation
     """
+    ctx = mcp_server.request_context()
+    # import bpdb; bpdb.set_trace()
     try:
-        logger.info(f"Retrieving documentation for module: {module}")
+        # logger.info(f"Retrieving documentation for module: {module}")
 
         if module != args.module:
-            logger.error("Module mismatch", extra={"requested_module": module, "server_module": args.module})
+            # logger.error("Module mismatch", extra={"requested_module": module, "server_module": args.module})
             raise ResourceError(f"Requested module '{module}' does not match server module '{args.module}'")
 
         # Local path to the documentation
         doc_path = DOCS_PATH / module / f"{module}_docs.txt"
 
         if not doc_path.exists():
-            logger.error("Documentation file not found", extra={"doc_module": module, "path": str(doc_path)})
+            # logger.error("Documentation file not found", extra={"doc_module": module, "path": str(doc_path)})
             raise ResourceError(f"Documentation file not found for module: {module}")
 
         async with aiofiles.open(doc_path) as file:
             content = await file.read()
-            logger.info("Successfully read documentation", extra={"doc_module": module, "size": len(content)})
+            # logger.info("Successfully read documentation", extra={"doc_module": module, "size": len(content)})
             return content
 
     except ResourceError:
         raise
     except Exception as e:
-        logger.error("Error reading documentation", extra={"doc_module": module, "error": str(e)}, exc_info=True)
+        # logger.error("Error reading documentation", extra={"doc_module": module, "error": str(e)}, exc_info=True)
         raise ResourceError(f"Error reading documentation file: {e}")
 
 
@@ -344,8 +357,9 @@ if __name__ == "__main__":
     # async def main():
     try:
         if args.list_vectorstores:
+            pass
             # await list_vectorstores()
-            logger.info("Vectorstore listing completed")
+            # logger.info("Vectorstore listing completed")
         # elif args.generate_mcp_config:
         #     config = await generate_mcp_config()
         #     if args.save:
@@ -357,13 +371,13 @@ if __name__ == "__main__":
         #     logger.info("Dry run completed. Use without --dry-run to start the server.")
         else:
             # Initialize and run the server
-            logger.info(f"Starting MCP server for {args.module} documentation...")
+            # logger.info(f"Starting MCP server for {args.module} documentation...")
             mcp_server.run(transport="stdio")
     except Exception as e:
-        logger.error(f"Error in main execution: {e}", exc_info=True)
+        # logger.error(f"Error in main execution: {e}", exc_info=True)
         # sys.exit(1)
         # except Exception as e:
-        logger.error(f"Error starting server: {e}")
+        # logger.error(f"Error starting server: {e}")
         traceback.print_exc(file=sys.stderr)
         sys.exit(1)
 

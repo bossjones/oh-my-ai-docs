@@ -83,22 +83,6 @@
             }
         },
         {
-            "name": "Python: pytest",
-            "type": "debugpy",
-            "request": "launch",
-            "module": "pytest",
-            "args": [
-                "--verbose",
-                "--showlocals",
-                "--tb=short",
-                "-v"
-            ],
-            "cwd": "${workspaceFolder}",
-            "env": {
-                "PYTHONPATH": "${workspaceFolder}"
-            }
-        },
-        {
             "name": "Python: pytest with debugger",
             "type": "debugpy",
             "request": "launch",
@@ -138,7 +122,7 @@
             "python": "${workspaceFolder}/.venv/bin/python"
         },
         {
-            "name": "Debug BOSS Async Vectorstore MCP Discord",
+            "name": "Debug src/oh_my_ai_docs/avectorstore_mcp.py",
             "type": "debugpy",
             "request": "launch",
             "program": "${workspaceFolder}/src/oh_my_ai_docs/avectorstore_mcp.py",
@@ -160,24 +144,95 @@
             "console": "integratedTerminal"
         },
         {
-            "type": "node",
+            "name": "Python: pytest",
+            "type": "debugpy",
             "request": "launch",
-            "name": "Run Inspector with npx on vectorstore_mcp.py",
-            "runtimeExecutable": "npx",
+            "program": "${workspaceFolder}/.venv/bin/pytest",
             "args": [
-                "-y",
-                "@modelcontextprotocol/inspector",
-                "uv",
-                "run",
-                "${workspaceFolder}/scripts/vectorstore_mcp.py",
-                "--module",
-                "discord",
-                "--stdio",
-                "--debug"
+                "-s",
+                "--verbose",
+                "--showlocals",
+                "--tb=short",
+                "tests"
+            ],
+            "jinja": true,
+            "justMyCode": false,
+            "cwd": "${workspaceFolder}",
+            "env": {
+                "PYTHONPATH": "${workspaceFolder}",
+                "PYDEVD_DISABLE_FILE_VALIDATION": "1",
+                "PYTHONASYNCIODEBUG": "1",
+                "UV_ACTIVE_PYTHON": "${workspaceFolder}/.venv/bin/python"
+            },
+            "envFile": "${workspaceFolder}/.env",
+            "python": "${workspaceFolder}/.venv/bin/python",
+            "console": "integratedTerminal"
+        },
+        {
+            "name": "Python: pytest with bpdb",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${workspaceFolder}/.venv/bin/pytest",
+            "args": [
+                "-s",
+                "--verbose",
+                "--showlocals",
+                "--tb=short",
+                // "--pdb",
+                // "--pdbcls=bpdb:BPdb",
+                "tests"
+            ],
+            "jinja": true,
+            "justMyCode": false,
+            "cwd": "${workspaceFolder}",
+            "env": {
+                "PYTHONPATH": "${workspaceFolder}",
+                "PYDEVD_DISABLE_FILE_VALIDATION": "1",
+                "PYTHONASYNCIODEBUG": "1",
+                "UV_ACTIVE_PYTHON": "${workspaceFolder}/.venv/bin/python"
+            },
+            "envFile": "${workspaceFolder}/.env",
+            "python": "${workspaceFolder}/.venv/bin/python",
+            "console": "integratedTerminal"
+        },
+        {
+            "name": "(uv) Python: Debug Tests",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${file}",
+            "purpose": [
+                "debug-test"
             ],
             "console": "integratedTerminal",
-            "internalConsoleOptions": "neverOpen"
+            "justMyCode": false,
+            "env": {
+                "PYTHONPATH": "${workspaceFolder}",
+                "PYDEVD_DISABLE_FILE_VALIDATION": "1",
+                "PYTHONASYNCIODEBUG": "1",
+                "UV_ACTIVE_PYTHON": "${workspaceFolder}/.venv/bin/python"
+            },
+            "envFile": "${workspaceFolder}/.env",
+            "python": "${workspaceFolder}/.venv/bin/python",
         },
+        // {
+        //     "type": "node",
+        //     "request": "launch",
+        //     "name": "Run Inspector with npx on vectorstore_mcp.py",
+        //     "runtimeExecutable": "npx",
+        //     "args": [
+        //         "-y",
+        //         "@modelcontextprotocol/inspector",
+        //         "uv",
+        //         "run",
+        //         "${workspaceFolder}/scripts/vectorstore_mcp.py",
+        //         "--module",
+        //         "discord",
+        //         "--stdio",
+        //         "--debug"
+        //     ],
+        //     "console": "integratedTerminal",
+        //     "internalConsoleOptions": "neverOpen"
+        // },
         // {
         //     "name": "UV Debug MCP Inspector Discord",
         //     "type": "debugpy",

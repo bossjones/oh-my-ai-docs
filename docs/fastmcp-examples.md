@@ -1,0 +1,5 @@
+- [FastMCP Context Usage Examples (GitHub Code Search)](https://github.com/search?q=from+mcp.server.fastmcp+import+Context%2C+FastMCP+request_context&type=code)
+- [iTerm MCP Tests](https://github.com/research-developer/iterm-mcp/tree/main/tests)
+- [Logfire MCP Implementation](https://github.com/pydantic/logfire-mcp/blob/de90f038bf7175ef2e4916903e388d222670bb2d/logfire_mcp/__main__.py#L13)
+- [OSO MCP Warehouse Implementation](https://github.com/opensource-observer/oso/blob/778de2bd353e576e41648ea5332b323970d16bea/warehouse/oso_mcp/main.py#L8)
+- [AMemCP FastMCP Server Implementation](https://github.com/jpollard-cs/AMemCP/blob/015559c70b492a426b9c98c99b21e3cdc5a50db8/amem/server/mcp_fastmcp_server.py#L16)
