@@ -138,7 +138,7 @@
             "python": "${workspaceFolder}/.venv/bin/python"
         },
         {
-            "name": "Debug Async Vectorstore MCP Discord",
+            "name": "Debug BOSS Async Vectorstore MCP Discord",
             "type": "debugpy",
             "request": "launch",
             "program": "${workspaceFolder}/src/oh_my_ai_docs/avectorstore_mcp.py",

@@ -94,3 +94,13 @@ vectorstore-all-dry-run-inspector:
     just vectorstore-langgraph-dry-run-inspector
     just vectorstore-langchain-dry-run-inspector
     just vectorstore-dpytest-dry-run-inspector
+
+# Run avectorstore-discord
+[group('vectorstore')]
+avectorstore-discord:
+    uv run ./src/oh_my_ai_docs/avectorstore_mcp.py --module discord --stdio --debug
+
+# Debug avectorstore-discord
+[group('vectorstore')]
+avectorstore-discord-inspector:
+    npx -y @modelcontextprotocol/inspector@0.8.2 uv run ./src/oh_my_ai_docs/avectorstore_mcp.py --module discord --stdio --debug
