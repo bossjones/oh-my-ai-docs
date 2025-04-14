@@ -1,6 +1,12 @@
 #!/usr/bin/env python3
 # async version, will come back to this
 # pyright: reportUnknownArgumentType=false
+# pyright: reportMissingImports=false
+# pyright: reportUnusedVariable=warning
+# pyright: reportUntypedBaseClass=error
+# pyright: reportGeneralTypeIssues=false
+# pyright: reportAttributeAccessIssue=false
+# pyright: reportInvalidTypeForm=false
 
 from __future__ import annotations
 
@@ -13,7 +19,9 @@ import os
 import sys
 import traceback
 from asyncio import timeout
+from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Dict, List, Literal, Optional, Tuple, TypeVar, Union, cast
 
@@ -171,10 +179,6 @@ def save_mcp_config(config: dict[str, dict[str, Any]]) -> None:
 # Create an MCP server with module name
 mcp_server = FastMCP(f"{args.module}-docs-mcp-server".lower())
 
-# # Option 2: Run with STDIO transport
-# async def start_server_stdio():
-#     await mcp.run_stdio_async()
-
 
 class MCPError(Exception):
     """Base error class for MCP operations."""
@@ -207,8 +211,13 @@ class DocumentResponse(BaseModel):
     total_found: int
 
 
+@dataclass
+class AppContext:
+    store: SKLearnVectorStore
+
+
 @asynccontextmanager
-async def vectorstore_session(vectorstore_path: str):
+async def vectorstore_session(vectorstore_path: str) -> AsyncIterator[AppContext]:
     """Context manager for vectorstore operations."""
     try:
         store = SKLearnVectorStore(
@@ -216,7 +225,7 @@ async def vectorstore_session(vectorstore_path: str):
             persist_path=str(vectorstore_path),
             serializer="parquet",
         )
-        yield store
+        yield AppContext(store=store)
     finally:
         # Cleanup if needed
         pass
@@ -254,30 +263,31 @@ async def query_tool(query: str, ctx: Context[Any, Any], config: QueryConfig | N
 
     config = config or QueryConfig()
     vectorstore_path = DOCS_PATH / args.module / "vectorstore" / f"{args.module}_vectorstore.parquet"
+    store = ctx.app_context.store
 
     try:
-        async with timeout(30):  # Prevent hanging on API calls
-            async with vectorstore_session(str(vectorstore_path)) as store:
-                await ctx.info(f"Querying vectorstore with k={config.k}")
+        # async with timeout(30):  # Prevent hanging on API calls
+        #     async with vectorstore_session(str(vectorstore_path)) as ctx:
+        await ctx.info(f"Querying vectorstore with k={config.k}")
 
-                retriever = store.as_retriever(search_kwargs={"k": config.k})
+        retriever = store.as_retriever(search_kwargs={"k": config.k})
 
-                relevant_docs: list[Document] = retriever.invoke(query)
+        relevant_docs: list[Document] = retriever.invoke(query)
 
-                await ctx.info(f"Retrieved {len(relevant_docs)} relevant documents")
+        await ctx.info(f"Retrieved {len(relevant_docs)} relevant documents")
 
-                documents: list[str] = []
-                scores: list[float] = []
+        documents: list[str] = []
+        scores: list[float] = []
 
-                for i, doc in enumerate(relevant_docs):
-                    if hasattr(doc, "metadata") and doc.metadata.get("score", 1.0) < config.min_relevance_score:
-                        continue
+        for i, doc in enumerate(relevant_docs):
+            if hasattr(doc, "metadata") and doc.metadata.get("score", 1.0) < config.min_relevance_score:
+                continue
 
-                    documents.append(doc.page_content)
-                    scores.append(doc.metadata.get("score", 1.0) if hasattr(doc, "metadata") else 1.0)
-                    await ctx.report_progress(i + 1, len(relevant_docs))
+            documents.append(doc.page_content)
+            scores.append(doc.metadata.get("score", 1.0) if hasattr(doc, "metadata") else 1.0)
+            await ctx.report_progress(i + 1, len(relevant_docs))
 
-                return DocumentResponse(documents=documents, scores=scores, total_found=len(relevant_docs))
+        return DocumentResponse(documents=documents, scores=scores, total_found=len(relevant_docs))
 
     except TimeoutError:
         await ctx.error("Query timed out")
