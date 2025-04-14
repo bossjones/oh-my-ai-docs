@@ -10,6 +10,19 @@ alwaysApply: false
 
 ## Critical Rules
 
+### Reference Documentation
+- ALWAYS consult SCRATCH.md when unsure about testing patterns or implementation details
+- Key sections in SCRATCH.md for reference:
+  * `## Infrastructure Setup` - For server and transport configuration
+  * `## Logging Implementation` - For logging patterns and structured data
+  * `## Testing Components` - For detailed testing patterns by component
+  * `## Error Handling` - For error tracking and recovery patterns
+  * `## Security Measures` - For security-related testing
+  * `## Performance Monitoring` - For performance testing patterns
+  * `## Documentation` - For documentation standards
+- Use these section headers to search for specific implementation details and examples
+- When searching, use exact section headers for precise results
+
 ### Test Infrastructure
 - ALWAYS use `create_connected_server_and_client_session` alias as `client_session`
 - ALWAYS ensure proper server instance handling via `mcp._mcp_server`
