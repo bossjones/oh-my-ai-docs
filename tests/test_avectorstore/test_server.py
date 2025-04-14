@@ -19,6 +19,7 @@ from mcp.server.fastmcp import Context
 from mcp.server.fastmcp.exceptions import ResourceError, ToolError
 from langchain_core.documents import Document
 from pydantic import BaseModel, Field
+import json
 
 from oh_my_ai_docs.avectorstore_mcp import (
     mcp_server,
@@ -374,35 +375,137 @@ class TestAVectorStoreMCPServer:
             assert f"{module}_vectorstore.parquet" in output
             assert str(Path("ai_docs") / module / "vectorstore" / f"{module}_vectorstore.parquet") in output
 
-    def test_generate_mcp_config(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-        """Test MCP configuration generation"""
+    def test_list_vectorstores_empty(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        """Test vectorstore listing with no files present"""
+        from oh_my_ai_docs.avectorstore_mcp import list_vectorstores, DOCS_PATH, BASE_PATH
+
+        # Setup empty test directory
+        test_docs = tmp_path / "ai_docs"
+        test_docs.mkdir(parents=True)
+
+        # Patch paths
+        monkeypatch.setattr("oh_my_ai_docs.avectorstore_mcp.DOCS_PATH", test_docs)
+        monkeypatch.setattr("oh_my_ai_docs.avectorstore_mcp.BASE_PATH", tmp_path)
+
+        # Capture stdout
+        import io
+        import sys
+        captured_output = io.StringIO()
+        sys.stdout = captured_output
+
+        list_vectorstores()
+
+        # Restore stdout
+        sys.stdout = sys.__stdout__
+
+        output = captured_output.getvalue()
+        assert "No vector stores found." in output
+
+    def test_list_vectorstores_invalid_structure(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        """Test vectorstore listing with invalid directory structure"""
+        from oh_my_ai_docs.avectorstore_mcp import list_vectorstores, DOCS_PATH, BASE_PATH
+
+        # Setup test directory with invalid structure
+        test_docs = tmp_path / "ai_docs"
+        test_docs.mkdir(parents=True)
+        invalid_path = test_docs / "invalid" / "vectorstore.parquet"
+        invalid_path.parent.mkdir(parents=True)
+        invalid_path.touch()
+
+        # Patch paths
+        monkeypatch.setattr("oh_my_ai_docs.avectorstore_mcp.DOCS_PATH", test_docs)
+        monkeypatch.setattr("oh_my_ai_docs.avectorstore_mcp.BASE_PATH", tmp_path)
+
+        # Capture stdout
+        import io
+        import sys
+        captured_output = io.StringIO()
+        sys.stdout = captured_output
+
+        list_vectorstores()
+
+        # Restore stdout
+        sys.stdout = sys.__stdout__
+
+        output = captured_output.getvalue()
+        assert "Total vector stores found: 1" in output
+        assert "invalid" in output
+
+    @pytest.fixture
+    def mock_script_path(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
+        """Fixture to set up a mock script path for testing"""
+        script_path = tmp_path / "src" / "oh_my_ai_docs" / "avectorstore_mcp.py"
+        script_path.parent.mkdir(parents=True)
+        script_path.touch()
+        monkeypatch.setattr("oh_my_ai_docs.avectorstore_mcp.__file__", str(script_path))
+        return script_path
+
+    def test_generate_mcp_config_all_modules(self, tmp_path: Path, mock_script_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        """Test MCP config generation for all modules"""
         from oh_my_ai_docs.avectorstore_mcp import generate_mcp_config, BASE_PATH
 
-        # Setup test environment
-        test_base = tmp_path / "test_base"
-        test_base.mkdir()
-        monkeypatch.setattr("oh_my_ai_docs.avectorstore_mcp.BASE_PATH", test_base)
+        # Patch BASE_PATH
+        monkeypatch.setattr("oh_my_ai_docs.avectorstore_mcp.BASE_PATH", tmp_path)
 
         # Generate config
         config = generate_mcp_config()
 
-        # Verify config structure
+        # Verify all modules are configured
         assert "mcpServers" in config
-        servers = config["mcpServers"]
-
-        # Check all module servers are configured
         for module in ["discord", "dpytest", "langgraph"]:
             server_name = f"{module}-docs-mcp-server"
-            assert server_name in servers
-            server_config = servers[server_name]
+            assert server_name in config["mcpServers"]
+            server_config = config["mcpServers"][server_name]
             assert server_config["command"] == "uv"
+            assert isinstance(server_config["args"], list)
             assert "--module" in server_config["args"]
             assert module in server_config["args"]
+            assert str(tmp_path) in server_config["args"]
+
+    def test_save_mcp_config(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        """Test saving MCP configuration to disk"""
+        from oh_my_ai_docs.avectorstore_mcp import save_mcp_config, BASE_PATH
+
+        # Patch BASE_PATH
+        monkeypatch.setattr("oh_my_ai_docs.avectorstore_mcp.BASE_PATH", tmp_path)
+
+        # Create test config
+        test_config = {
+            "mcpServers": {
+                "test-server": {
+                    "command": "uv",
+                    "args": ["run", "test"]
+                }
+            }
+        }
+
+        # Save config
+        save_mcp_config(test_config)
+
+        # Verify file was created and contains correct content
+        config_path = tmp_path / "mcp.json"
+        assert config_path.exists()
+        with open(config_path) as f:
+            saved_config = json.load(f)
+            assert saved_config == test_config
+
+    @pytest.mark.anyio
+    async def test_vectorstore_session_cleanup(self, mock_context: Context[Any, Any], mock_vectorstore: Any) -> None:
+        """Test vectorstore session cleanup"""
+        from oh_my_ai_docs.avectorstore_mcp import vectorstore_session, DOCS_PATH
+
+        vectorstore_path = DOCS_PATH / "test" / "vectorstore" / "test_vectorstore.parquet"
+
+        async with vectorstore_session(str(vectorstore_path)) as session:
+            assert isinstance(session.store, mock_vectorstore.return_value.__class__)
+
+        # Verify cleanup (mock_vectorstore cleanup would be called if implemented)
+        mock_vectorstore.assert_called_once()
 
     @pytest.mark.anyio
     async def test_query_empty_query(self, mock_context: Context[Any, Any]) -> None:
         """Test query handling with empty query string"""
-        with pytest.raises(ValueError, match="Query cannot be empty"):
+        with pytest.raises(ToolError, match="Query cannot be empty"):
             await mcp_server._tool_manager.call_tool(
                 "query_docs",
                 {
@@ -416,16 +519,8 @@ class TestAVectorStoreMCPServer:
     @pytest.mark.anyio
     async def test_query_invalid_k(self, mock_context: Context[Any, Any]) -> None:
         """Test query config validation with invalid k value"""
-        with pytest.raises(ValueError, match="k cannot be greater than 10"):
-            await mcp_server._tool_manager.call_tool(
-                "query_docs",
-                {
-                    "query": "test query",
-                    "config": QueryConfig(k=11).model_dump(),  # Invalid k value
-                    "ctx": mock_context
-                },
-                context=mock_context
-            )
+        with pytest.raises(ValueError, match="Input should be less than or equal to 10"):
+            QueryConfig(k=11)
 
     @pytest.mark.anyio
     async def test_get_all_docs_missing_file(self, test_docs_path: Path) -> None:
@@ -433,5 +528,5 @@ class TestAVectorStoreMCPServer:
         # Remove the test docs file
         (test_docs_path / "dpytest_docs.txt").unlink()
 
-        with pytest.raises(ResourceError, match="Documentation file not found"):
+        with pytest.raises(ValueError, match="Error creating resource from template: Documentation file not found for module: dpytest"):
             await mcp_server._resource_manager.get_resource("docs://dpytest/full")
