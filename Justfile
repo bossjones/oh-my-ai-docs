@@ -21,6 +21,7 @@ import "justfiles/taplo.just"
 import "justfiles/audit.just"
 import "justfiles/llmstxt.just"
 import "justfiles/vectorstore.just"
+import "justfiles/open.just"
 
 # display help information
 default:
