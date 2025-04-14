@@ -139,7 +139,12 @@ def list_vectorstores():
     for module, files in stores_by_module.items():
         print(f"Module: {module}")
         for file in files:
-            print(f"  - {file.relative_to(BASE_PATH)}")
+            try:
+                relative_path = file.relative_to(BASE_PATH)
+            except ValueError:
+                # If file is not under BASE_PATH, show path relative to DOCS_PATH parent
+                relative_path = file.relative_to(DOCS_PATH.parent)
+            print(f"  - {relative_path}")
         print()
 
     print(f"Total vector stores found: {len(parquet_files)}")

@@ -317,3 +317,121 @@ class TestAVectorStoreMCPServer:
         """Test documentation retrieval with mismatched module"""
         with pytest.raises(ValueError, match="Requested module 'discord' does not match server module 'dpytest'"):
             await mcp_server._resource_manager.get_resource("docs://discord/full")
+
+    @pytest.mark.anyio
+    async def test_argument_parsing(self) -> None:
+        """Test argument parsing functionality"""
+        from oh_my_ai_docs.avectorstore_mcp import parser
+
+        # Test default arguments
+        args = parser.parse_args([])
+        assert args.module == "dpytest"
+        assert args.stdio is True
+        assert not args.debug
+        assert not args.dry_run
+
+        # Test custom arguments
+        args = parser.parse_args(["--module", "discord", "--debug", "--dry-run"])
+        assert args.module == "discord"
+        assert args.debug is True
+        assert args.dry_run is True
+
+    def test_list_vectorstores(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        """Test vectorstore listing functionality"""
+        from oh_my_ai_docs.avectorstore_mcp import list_vectorstores, DOCS_PATH, BASE_PATH
+
+        # Setup test vectorstore files
+        test_docs = tmp_path / "ai_docs"
+        test_docs.mkdir(parents=True)
+
+        # Create test vectorstores
+        modules = ["discord", "dpytest", "langgraph"]
+        for module in modules:
+            module_path = test_docs / module / "vectorstore"
+            module_path.mkdir(parents=True)
+            (module_path / f"{module}_vectorstore.parquet").touch()
+
+        # Patch both DOCS_PATH and BASE_PATH to use our temporary directory
+        monkeypatch.setattr("oh_my_ai_docs.avectorstore_mcp.DOCS_PATH", test_docs)
+        monkeypatch.setattr("oh_my_ai_docs.avectorstore_mcp.BASE_PATH", tmp_path)
+
+        # Capture stdout to verify output
+        import io
+        import sys
+        captured_output = io.StringIO()
+        sys.stdout = captured_output
+
+        list_vectorstores()
+
+        # Restore stdout
+        sys.stdout = sys.__stdout__
+
+        output = captured_output.getvalue()
+
+        # Verify output contains all modules and their vectorstores
+        for module in modules:
+            assert module in output
+            assert f"{module}_vectorstore.parquet" in output
+            assert str(Path("ai_docs") / module / "vectorstore" / f"{module}_vectorstore.parquet") in output
+
+    def test_generate_mcp_config(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        """Test MCP configuration generation"""
+        from oh_my_ai_docs.avectorstore_mcp import generate_mcp_config, BASE_PATH
+
+        # Setup test environment
+        test_base = tmp_path / "test_base"
+        test_base.mkdir()
+        monkeypatch.setattr("oh_my_ai_docs.avectorstore_mcp.BASE_PATH", test_base)
+
+        # Generate config
+        config = generate_mcp_config()
+
+        # Verify config structure
+        assert "mcpServers" in config
+        servers = config["mcpServers"]
+
+        # Check all module servers are configured
+        for module in ["discord", "dpytest", "langgraph"]:
+            server_name = f"{module}-docs-mcp-server"
+            assert server_name in servers
+            server_config = servers[server_name]
+            assert server_config["command"] == "uv"
+            assert "--module" in server_config["args"]
+            assert module in server_config["args"]
+
+    @pytest.mark.anyio
+    async def test_query_empty_query(self, mock_context: Context[Any, Any]) -> None:
+        """Test query handling with empty query string"""
+        with pytest.raises(ValueError, match="Query cannot be empty"):
+            await mcp_server._tool_manager.call_tool(
+                "query_docs",
+                {
+                    "query": "   ",  # Empty query with whitespace
+                    "config": QueryConfig().model_dump(),
+                    "ctx": mock_context
+                },
+                context=mock_context
+            )
+
+    @pytest.mark.anyio
+    async def test_query_invalid_k(self, mock_context: Context[Any, Any]) -> None:
+        """Test query config validation with invalid k value"""
+        with pytest.raises(ValueError, match="k cannot be greater than 10"):
+            await mcp_server._tool_manager.call_tool(
+                "query_docs",
+                {
+                    "query": "test query",
+                    "config": QueryConfig(k=11).model_dump(),  # Invalid k value
+                    "ctx": mock_context
+                },
+                context=mock_context
+            )
+
+    @pytest.mark.anyio
+    async def test_get_all_docs_missing_file(self, test_docs_path: Path) -> None:
+        """Test documentation retrieval with missing file"""
+        # Remove the test docs file
+        (test_docs_path / "dpytest_docs.txt").unlink()
+
+        with pytest.raises(ResourceError, match="Documentation file not found"):
+            await mcp_server._resource_manager.get_resource("docs://dpytest/full")
