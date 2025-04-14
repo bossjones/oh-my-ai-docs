@@ -45,6 +45,8 @@ fi
 
 echo "===== CURRENT VERSION CHECK ====="
 CURRENT_VERSION=$(uv run cz version -p)
+echo "[running] uv run cz version -p"
+echo "Current version: ${CURRENT_VERSION}"
 if [ -z "${CURRENT_VERSION}" ]; then
     echo "❌ Failed to determine current version"
     exit 1
