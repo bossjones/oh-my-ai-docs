@@ -23,11 +23,13 @@ from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Dict, List, Optional, TypeVar, cast
+from typing import Any, Dict, List, Optional, Type, TypeVar, cast
 
 import aiofiles
+from langchain.vectorstores import VectorStore
 from langchain_community.vectorstores import SKLearnVectorStore
 from langchain_core.documents.base import Document
+from langchain_core.embeddings import Embeddings
 from langchain_core.retrievers import BaseRetriever
 from langchain_core.vectorstores import VectorStoreRetriever
 from langchain_openai import OpenAIEmbeddings
@@ -203,6 +205,66 @@ class QueryConfig(BaseModel):
 
 def get_vectorstore_path() -> Path:
     return DOCS_PATH / args.module / "vectorstore" / f"{args.module}_vectorstore.parquet"
+
+
+# def vectorstore_factory(store: SKLearnVectorStore | None = None, embeddings: OpenAIEmbeddings | None = None) -> SKLearnVectorStore:
+#     if store:
+#         return store
+#     else:
+#         vectorstore_path = get_vectorstore_path()
+#         return SKLearnVectorStore(
+#             embedding=OpenAIEmbeddings(model="text-embedding-3-large"),
+#             persist_path=str(vectorstore_path),
+#             serializer="parquet",
+#         )
+
+
+def vectorstore_factory(
+    store: VectorStore | None = None,
+    embeddings: Embeddings | None = None,
+    vector_store_cls: type[VectorStore] = None,
+    vector_store_kwargs: dict[str, Any] = None,
+) -> VectorStore:
+    """
+    Factory function to create or return a vector store.
+
+    Args:
+        store: An existing vector store to return if provided
+        embeddings: Embedding model to use for vectorization
+        vector_store_cls: Vector store class to instantiate if store is None
+        vector_store_kwargs: Additional arguments to pass to the vector store constructor
+
+    Returns:
+        A vector store instance
+    """
+    if store:
+        return store
+
+    if vector_store_cls is None:
+        from langchain.vectorstores import SKLearnVectorStore
+
+        vector_store_cls = SKLearnVectorStore
+
+    if embeddings is None:
+        from langchain.embeddings.openai import OpenAIEmbeddings
+
+        embeddings = OpenAIEmbeddings(model="text-embedding-3-large")
+
+    if vector_store_kwargs is None:
+        vector_store_kwargs = {}
+
+    # Add default kwargs if not provided
+    if "persist_path" not in vector_store_kwargs:
+        vectorstore_path = get_vectorstore_path()
+        vector_store_kwargs["persist_path"] = str(vectorstore_path)
+
+    if "serializer" not in vector_store_kwargs:
+        vector_store_kwargs["serializer"] = "parquet"
+
+    # Ensure embedding is set
+    vector_store_kwargs["embedding"] = embeddings
+
+    return vector_store_cls(**vector_store_kwargs)
 
 
 @asynccontextmanager

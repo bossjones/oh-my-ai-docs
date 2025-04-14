@@ -1,10 +1,5 @@
 #!/usr/bin/env python3
-# pyright: reportMissingImports=false
-# pyright: reportUnusedVariable=warning
-# pyright: reportUntypedBaseClass=error
-# pyright: reportGeneralTypeIssues=false
-# pyright: reportAttributeAccessIssue=false
-# pyright: reportInvalidTypeForm=false
+
 from __future__ import annotations
 
 import pytest
@@ -97,11 +92,13 @@ class TestAVectorStoreMCPServer:
         yield docs_dir
 
     @pytest.mark.anyio
+    @pytest.mark.fastmcp_basic
     async def test_server_initialization(self) -> None:
         """Test that the MCP server is initialized with correct default name"""
         assert mcp_server.name == "dpytest-docs-mcp-server"
 
     @pytest.mark.anyio
+    @pytest.mark.fastmcp_tools
     async def test_query_tool_registration(self) -> None:
         """Test that query_docs tool is properly registered with correct parameters"""
         tools = mcp_server._tool_manager.list_tools()
@@ -119,10 +116,14 @@ class TestAVectorStoreMCPServer:
         assert params["query"]["type"] == "string"
 
     @pytest.mark.anyio
+    @pytest.mark.fastmcp_tools
+    @pytest.mark.fastmcp_context
+    @pytest.mark.vectorstore
     async def test_successful_query(
         self,
         real_vectorstore: SKLearnVectorStore,
-        test_docs_path: Path
+        test_docs_path: Path,
+        mocker: MockerFixture
     ) -> None:
         """
         Test successful query execution through the server.
@@ -130,23 +131,13 @@ class TestAVectorStoreMCPServer:
         Args:
             real_vectorstore: Real vectorstore with test data
             test_docs_path: Test documentation directory
+            mocker: Pytest mocker fixture
         """
-        # Capture log messages and progress updates
-        log_messages = []
-        progress_updates = []
+        # Mock the log message and progress update methods
+        mock_log = mocker.patch("mcp.server.session.ServerSession.send_log_message")
+        mock_progress = mocker.patch("mcp.server.session.ServerSession.send_progress_update")
 
         async with client_session(mcp_server._mcp_server) as client:
-            # Set up callbacks
-            async def log_callback(level: str, message: str, logger: str = None) -> None:
-                log_messages.append((level, message))
-
-            async def progress_callback(progress: int, total: int) -> None:
-                progress_updates.append((progress, total))
-
-            # Register callbacks
-            client.session.on_log_message = log_callback
-            client.session.on_progress = progress_callback
-
             # Patch the vectorstore in the server
             mcp_server._vectorstore = real_vectorstore
 
@@ -167,30 +158,34 @@ class TestAVectorStoreMCPServer:
             assert response.total_found == 1
 
             # Verify log messages
-            info_logs = [msg for level, msg in log_messages if level == "info"]
-            assert len(info_logs) >= 2
-            assert "Querying vectorstore with k=3" in info_logs[0]
-            assert "Retrieved 1 relevant documents" in info_logs[1]
+            mock_log.assert_any_call(
+                level="info",
+                data="Querying vectorstore with k=3",
+                logger=None
+            )
+            mock_log.assert_any_call(
+                level="info",
+                data="Retrieved 1 relevant documents",
+                logger=None
+            )
 
             # Verify progress updates
-            assert len(progress_updates) == 1
-            assert progress_updates[0] == (1, 1)
+            mock_progress.assert_called_once_with(1, 1)
 
     @pytest.mark.anyio
+    @pytest.mark.fastmcp_tools
+    @pytest.mark.fastmcp_context
+    @pytest.mark.vectorstore
     async def test_query_with_low_relevance_threshold(
         self,
-        real_vectorstore: SKLearnVectorStore
+        real_vectorstore: SKLearnVectorStore,
+        mocker: MockerFixture
     ) -> None:
         """Test query filtering based on relevance score threshold"""
-        log_messages = []
+        # Mock the log message method
+        mock_log = mocker.patch("mcp.server.session.ServerSession.send_log_message")
 
         async with client_session(mcp_server._mcp_server) as client:
-            # Set up logging callback
-            async def log_callback(level: str, message: str, logger: str = None) -> None:
-                log_messages.append((level, message))
-
-            client.session.on_log_message = log_callback
-
             # Patch the vectorstore in the server
             mcp_server._vectorstore = real_vectorstore
 
@@ -210,7 +205,27 @@ class TestAVectorStoreMCPServer:
             assert len(response.scores) == 0
             assert response.total_found == 1
 
+            # Verify appropriate log messages
+            mock_log.assert_any_call(
+                level="info",
+                data="Querying vectorstore with k=3",
+                logger=None
+            )
+            mock_log.assert_any_call(
+                level="info",
+                data="Retrieved 1 relevant documents",
+                logger=None
+            )
+            mock_log.assert_any_call(
+                level="info",
+                data="Filtered to 0 documents with min_relevance_score=0.98",
+                logger=None
+            )
+
     @pytest.mark.anyio
+    @pytest.mark.fastmcp_tools
+    @pytest.mark.fastmcp_context
+    @pytest.mark.vectorstore
     async def test_query_timeout(
         self,
         real_vectorstore: SKLearnVectorStore,
@@ -224,15 +239,10 @@ class TestAVectorStoreMCPServer:
             side_effect=TimeoutError()
         )
 
-        log_messages = []
+        # Mock the log message method
+        mock_log = mocker.patch("mcp.server.session.ServerSession.send_log_message")
 
         async with client_session(mcp_server._mcp_server) as client:
-            # Set up logging callback
-            async def log_callback(level: str, message: str, logger: str = None) -> None:
-                log_messages.append((level, message))
-
-            client.session.on_log_message = log_callback
-
             # Patch the vectorstore in the server
             mcp_server._vectorstore = real_vectorstore
 
@@ -246,11 +256,14 @@ class TestAVectorStoreMCPServer:
                 )
 
             # Verify error was logged
-            error_logs = [msg for level, msg in log_messages if level == "error"]
-            assert len(error_logs) == 1
-            assert "Query timed out" in error_logs[0]
+            mock_log.assert_any_call(
+                level="error",
+                data="Query timed out",
+                logger=None
+            )
 
     @pytest.mark.anyio
+    @pytest.mark.fastmcp_resources
     async def test_get_all_docs_success(
         self,
         test_docs_path: Path
@@ -267,12 +280,14 @@ class TestAVectorStoreMCPServer:
         assert content == "Test documentation content"
 
     @pytest.mark.anyio
+    @pytest.mark.fastmcp_resources
     async def test_get_all_docs_module_mismatch(self) -> None:
         """Test documentation retrieval with mismatched module"""
         with pytest.raises(ValueError, match="Requested module 'discord' does not match server module 'dpytest'"):
             await mcp_server._resource_manager.get_resource("docs://discord/full")
 
     @pytest.mark.anyio
+    @pytest.mark.fastmcp_basic
     async def test_argument_parsing(self) -> None:
         """Test argument parsing functionality"""
         from oh_my_ai_docs.avectorstore_mcp import parser
@@ -290,6 +305,8 @@ class TestAVectorStoreMCPServer:
         assert args.debug is True
         assert args.dry_run is True
 
+    @pytest.mark.fastmcp_basic
+    @pytest.mark.vectorstore
     def test_list_vectorstores(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         """Test vectorstore listing functionality"""
         from oh_my_ai_docs.avectorstore_mcp import list_vectorstores, DOCS_PATH, BASE_PATH
@@ -328,6 +345,8 @@ class TestAVectorStoreMCPServer:
             assert f"{module}_vectorstore.parquet" in output
             assert str(Path("ai_docs") / module / "vectorstore" / f"{module}_vectorstore.parquet") in output
 
+    @pytest.mark.fastmcp_basic
+    @pytest.mark.vectorstore
     def test_list_vectorstores_empty(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         """Test vectorstore listing with no files present"""
         from oh_my_ai_docs.avectorstore_mcp import list_vectorstores, DOCS_PATH, BASE_PATH
@@ -354,6 +373,8 @@ class TestAVectorStoreMCPServer:
         output = captured_output.getvalue()
         assert "No vector stores found." in output
 
+    @pytest.mark.fastmcp_basic
+    @pytest.mark.vectorstore
     def test_list_vectorstores_invalid_structure(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         """Test vectorstore listing with invalid directory structure"""
         from oh_my_ai_docs.avectorstore_mcp import list_vectorstores, DOCS_PATH, BASE_PATH
@@ -393,6 +414,7 @@ class TestAVectorStoreMCPServer:
         monkeypatch.setattr("oh_my_ai_docs.avectorstore_mcp.__file__", str(script_path))
         return script_path
 
+    @pytest.mark.fastmcp_basic
     def test_generate_mcp_config_all_modules(self, tmp_path: Path, mock_script_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         """Test MCP config generation for all modules"""
         from oh_my_ai_docs.avectorstore_mcp import generate_mcp_config, BASE_PATH
@@ -415,6 +437,7 @@ class TestAVectorStoreMCPServer:
             assert module in server_config["args"]
             assert str(tmp_path) in server_config["args"]
 
+    @pytest.mark.fastmcp_basic
     def test_save_mcp_config(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         """Test saving MCP configuration to disk"""
         from oh_my_ai_docs.avectorstore_mcp import save_mcp_config, BASE_PATH
@@ -443,6 +466,8 @@ class TestAVectorStoreMCPServer:
             assert saved_config == test_config
 
     @pytest.mark.anyio
+    @pytest.mark.fastmcp_context
+    @pytest.mark.vectorstore
     async def test_vectorstore_session_cleanup(self, test_docs_path: Path) -> None:
         """Test vectorstore session cleanup"""
         from oh_my_ai_docs.avectorstore_mcp import vectorstore_session, DOCS_PATH
@@ -467,6 +492,7 @@ class TestAVectorStoreMCPServer:
             assert results[0].page_content == "Test content"
 
     @pytest.mark.anyio
+    @pytest.mark.fastmcp_tools
     async def test_query_empty_query(self) -> None:
         """Test query handling with empty query string"""
         async with client_session(mcp_server._mcp_server) as client:
@@ -478,13 +504,15 @@ class TestAVectorStoreMCPServer:
                     }
                 )
 
-    @pytest.mark.anyio
-    async def test_query_invalid_k(self) -> None:
+    @pytest.mark.fastmcp_tools
+    @pytest.mark.vectorstore
+    def test_query_invalid_k(self) -> None:
         """Test query config validation with invalid k value"""
         with pytest.raises(ValueError, match="Input should be less than or equal to 10"):
             QueryConfig(k=11)
 
     @pytest.mark.anyio
+    @pytest.mark.fastmcp_resources
     async def test_get_all_docs_missing_file(self, test_docs_path: Path) -> None:
         """Test documentation retrieval with missing file"""
         # Remove the test docs file
@@ -494,6 +522,9 @@ class TestAVectorStoreMCPServer:
             await mcp_server._resource_manager.get_resource("docs://dpytest/full")
 
     @pytest.mark.anyio
+    @pytest.mark.fastmcp_context
+    @pytest.mark.fastmcp_tools
+    @pytest.mark.vectorstore
     async def test_context_logging_comprehensive(
         self,
         real_vectorstore: SKLearnVectorStore,
