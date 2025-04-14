@@ -29,6 +29,7 @@ import aiofiles
 import anyio
 from langchain_community.vectorstores import SKLearnVectorStore
 from langchain_core.documents.base import Document
+from langchain_core.retrievers import BaseRetriever
 from langchain_openai import OpenAIEmbeddings
 from mcp import ClientSession, StdioServerParameters
 from mcp.client.sse import sse_client
@@ -263,14 +264,14 @@ async def query_tool(query: str, ctx: Context[Any, Any], config: QueryConfig | N
 
     config = config or QueryConfig()
     vectorstore_path = DOCS_PATH / args.module / "vectorstore" / f"{args.module}_vectorstore.parquet"
-    store = ctx.app_context.store
+    store: SKLearnVectorStore = ctx.app_context.store
 
     try:
         # async with timeout(30):  # Prevent hanging on API calls
         #     async with vectorstore_session(str(vectorstore_path)) as ctx:
         await ctx.info(f"Querying vectorstore with k={config.k}")
 
-        retriever = store.as_retriever(search_kwargs={"k": config.k})
+        retriever: BaseRetriever = store.as_retriever(search_kwargs={"k": config.k})
 
         relevant_docs: list[Document] = retriever.invoke(query)
 

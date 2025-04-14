@@ -10,14 +10,15 @@ from __future__ import annotations
 import pytest
 from pytest_mock import MockerFixture
 from pathlib import Path
-from typing import Any, Dict, TypeVar, cast
+from typing import Any, Dict, TypeVar, cast, Optional
 from collections.abc import Awaitable, Mapping
 from collections.abc import Callable, Generator
-from mcp.types import TextContent, Tool, ResourceTemplate
+from mcp.types import TextContent, Tool, ResourceTemplate, Resource
+from mcp.server.fastmcp.resources.base import Resource as FunctionResource
 from mcp.server.fastmcp import Context
 from mcp.server.fastmcp.exceptions import ResourceError, ToolError
 from langchain_core.documents import Document
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from oh_my_ai_docs.avectorstore_mcp import (
     mcp_server,
@@ -27,23 +28,58 @@ from oh_my_ai_docs.avectorstore_mcp import (
     DOCS_PATH
 )
 
-# Create a mock context class that implements both Pydantic and Mapping interfaces
-class MockContext(BaseModel, Mapping[str, Any]):
-    info: Callable[[str], Awaitable[None]]
-    error: Callable[[str], Awaitable[None]]
-    report_progress: Callable[[int, int], Awaitable[None]]
+# Create a mock context class that extends the actual Context class
+class MockContext(Context[Any, Any]):
+    """Mock context for testing that extends the actual Context class."""
 
-    class Config:
-        arbitrary_types_allowed = True
+    info_fn: Callable[[str], Awaitable[None]] = Field(default=None)
+    error_fn: Callable[[str], Awaitable[None]] = Field(default=None)
+    report_progress_fn: Callable[[int, int], Awaitable[None]] = Field(default=None)
+    app_context: Any = Field(default=None)
+    mock_request_id: str = Field(default="test-request-id")
 
-    def __getitem__(self, key: str) -> Any:
-        return getattr(self, key)
+    @property
+    def request_id(self) -> str:
+        """Override request_id to avoid request context dependency."""
+        return self.mock_request_id
 
-    def __iter__(self):
-        return iter(self.__dict__)
+    async def info(self, message: str) -> None:
+        """Send info message."""
+        if self.info_fn:
+            await self.info_fn(message)
 
-    def __len__(self) -> int:
-        return len(self.__dict__)
+    async def error(self, message: str) -> None:
+        """Send error message."""
+        if self.error_fn:
+            await self.error_fn(message)
+
+    async def report_progress(self, current: int, total: int) -> None:
+        """Report progress."""
+        if self.report_progress_fn:
+            await self.report_progress_fn(current, total)
+
+    def model_dump(self) -> dict[str, Any]:
+        """Override model_dump to include our custom attributes."""
+        return {
+            "info": self.info_fn,
+            "error": self.error_fn,
+            "report_progress": self.report_progress_fn,
+            "app_context": self.app_context,
+            "request_id": self.request_id
+        }
+
+    @classmethod
+    def create(cls, info: Callable[[str], Awaitable[None]],
+             error: Callable[[str], Awaitable[None]],
+             report_progress: Callable[[int, int], Awaitable[None]],
+             app_context: Any = None) -> MockContext:
+        """Factory method to create MockContext instance."""
+        return cls(
+            info_fn=info,
+            error_fn=error,
+            report_progress_fn=report_progress,
+            app_context=app_context
+        )
 
 # Test class for avectorstore MCP server
 class TestAVectorStoreMCPServer:
@@ -53,35 +89,34 @@ class TestAVectorStoreMCPServer:
     """
 
     @pytest.fixture
-    def mock_context(self, mocker: MockerFixture) -> Generator[Context[Any, Any], None, None]:
+    def mock_context(self, mocker: MockerFixture, mock_vectorstore: Any) -> Generator[Context[Any, Any], None, None]:
         """
         Fixture providing a mocked MCP Context for testing.
 
         Scope: function - ensures test isolation
         Args:
             mocker: pytest-mock fixture for creating mocks
+            mock_vectorstore: Mocked vectorstore fixture
 
         Returns:
             Generator yielding mocked Context with Any types
         """
-        mock_ctx = mocker.MagicMock(spec=Context)
-
         # Create AsyncMock objects for the async methods
         info_mock = mocker.AsyncMock(name="info")
         error_mock = mocker.AsyncMock(name="error")
         progress_mock = mocker.AsyncMock(name="report_progress")
 
-        # Assign the mocks to the context
-        mock_ctx.info = info_mock
-        mock_ctx.error = error_mock
-        mock_ctx.report_progress = progress_mock
+        # Create app context with store
+        app_context = mocker.MagicMock()
+        app_context.store = mock_vectorstore.return_value
 
-        # Create a pydantic-compatible context
-        mock_ctx.model_dump = lambda: MockContext(
+        # Create a context using the factory method
+        mock_ctx = MockContext.create(
             info=info_mock,
             error=error_mock,
-            report_progress=progress_mock
-        ).model_dump()
+            report_progress=progress_mock,
+            app_context=app_context
+        )
 
         yield mock_ctx
 
@@ -201,9 +236,9 @@ class TestAVectorStoreMCPServer:
         assert result.scores[0] == 0.95
         assert result.total_found == 1
 
-        # Verify context method calls using mock assertions
-        mock_info = cast(mocker.AsyncMock, mock_context.info)
-        mock_progress = cast(mocker.AsyncMock, mock_context.report_progress)
+        # Verify context method calls
+        mock_info = cast(mocker.AsyncMock, mock_context.info_fn)
+        mock_progress = cast(mocker.AsyncMock, mock_context.report_progress_fn)
 
         assert mock_info.await_count >= 2
         assert mock_info.await_args_list[0][0][0] == "Querying vectorstore with k=3"
@@ -256,7 +291,7 @@ class TestAVectorStoreMCPServer:
             )
 
         # Verify error was logged
-        mock_error = cast(mocker.AsyncMock, mock_context.error)
+        mock_error = cast(mocker.AsyncMock, mock_context.error_fn)
         assert mock_error.await_count == 1
         assert mock_error.await_args_list[0][0][0] == "Query timed out"
 
@@ -266,8 +301,13 @@ class TestAVectorStoreMCPServer:
         test_docs_path: Path
     ) -> None:
         """Test successful documentation retrieval"""
-        content = await mcp_server._resource_manager.get_resource("docs://dpytest/full")
+        resource = await mcp_server._resource_manager.get_resource("docs://dpytest/full")
 
+        # Verify we got a Resource
+        assert isinstance(resource, FunctionResource)
+
+        # Get the actual content by calling the resource function
+        content = resource.fn()
         assert isinstance(content, str)
         assert content == "Test documentation content"
 
