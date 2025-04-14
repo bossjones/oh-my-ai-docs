@@ -123,10 +123,14 @@
                 "PYTHONPATH": "${workspaceFolder}",
                 "PYDEVD_DISABLE_FILE_VALIDATION": "1",
                 "PYTHONASYNCIODEBUG": "1",
-                // "UV_ACTIVE_PYTHON": "${workspaceFolder}/.venv/bin/python"
+                "UV_ACTIVE_PYTHON": "${workspaceFolder}/.venv/bin/python",
+                "VIRTUAL_ENV": "${workspaceFolder}/.venv",
+                // NOTE: If you have the pytest-cov coverage module installed, VS Code doesn't stop at breakpoints while debugging because pytest-cov is using the same technique to access the source code being run. To prevent this behavior, include --no-cov in pytestArgs when debugging tests, for example by adding "env": {"PYTEST_ADDOPTS": "--no-cov"} to your debug configuration. (See Debug Tests above about how to set up that launch configuration.) (For more information, see Debuggers and PyCharm in the pytest-cov documentation.)
+                "PYTEST_ADDOPTS": "--no-cov"
             },
-            // "envFile": "${workspaceFolder}/.env",
-            // "python": "${workspaceFolder}/.venv/bin/python",
+            "envFile": "${workspaceFolder}/.env",
+            "python": "${workspaceFolder}/.venv/bin/python3",
+            "cwd": "${workspaceFolder}"
         },
         // {
         //     "type": "node",
@@ -147,20 +151,5 @@
         //     "console": "integratedTerminal",
         //     "internalConsoleOptions": "neverOpen"
         // },
-        // {
-        //     "name": "UV Debug MCP Inspector Discord",
-        //     "type": "debugpy",
-        //     "request": "launch",
-        //     "program": "${workspaceFolder}/scripts/run_mcp_inspector.sh",
-        //     "console": "integratedTerminal",
-        //     "jinja": true,
-        //     "justMyCode": false,
-        //     "env": {
-        //         "PYTHONPATH": "${workspaceFolder}",
-        //         "PATH": "${env:PATH}:${workspaceFolder}/.venv/bin"
-        //     },
-        //     "envFile": "${workspaceFolder}/.env",
-        //     "python": "${workspaceFolder}/.venv/bin/python"
-        // }
     ]
 }

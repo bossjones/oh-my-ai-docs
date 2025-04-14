@@ -155,7 +155,7 @@
         "--verbose",
         "--showlocals",
         "--tb=short",
-        "tests"
     ],
-    "python.testing.cwd": "tests" // optional: set working directory for tests
+    "python.testing.cwd": "${workspaceFolder}/tests",
+    "python.testing.autoTestDiscoverOnSaveEnabled": true,
 }
