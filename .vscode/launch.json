@@ -138,7 +138,7 @@
             "python": "${workspaceFolder}/.venv/bin/python"
         },
         {
-            "name": "UV RUN Async Vectorstore MCP Discord",
+            "name": "Debug Async Vectorstore MCP Discord",
             "type": "debugpy",
             "request": "launch",
             "program": "${workspaceFolder}/src/oh_my_ai_docs/avectorstore_mcp.py",
@@ -151,10 +151,13 @@
             "jinja": true,
             "justMyCode": false,
             "env": {
-                "PYTHONPATH": "${workspaceFolder}"
+                "PYTHONPATH": "${workspaceFolder}",
+                "PYDEVD_DISABLE_FILE_VALIDATION": "1",
+                "PYTHONASYNCIODEBUG": "1"
             },
             "envFile": "${workspaceFolder}/.env",
-            "python": "${workspaceFolder}/.venv/bin/python"
+            "python": "${workspaceFolder}/.venv/bin/python",
+            "console": "integratedTerminal"
         },
         {
             "type": "node",
