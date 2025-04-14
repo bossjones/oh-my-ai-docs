@@ -5,79 +5,12 @@
     "version": "0.2.0",
     "configurations": [
         {
-            // SOURCE: https://github.com/langflow-ai/langflow/blob/99454a3d5d9574114b134070744d3155b8251320/.vscode/launch.json#L8
-            "name": "Debug Backend FastAPI",
-            "type": "debugpy",
-            "request": "launch",
-            "module": "uvicorn",
-            "args": [
-                // Treat APP as an application factory, i.e. a () -> <ASGI app> callable.
-                "--factory",
-                "surfaces.API.server:app",
-                "--port",
-                "8080",
-                "--host",
-                "0.0.0.0",
-                "--reload",
-                "--log-level",
-                "debug",
-                "--loop",
-                "asyncio"
-            ],
-            // SOURCE: https://code.visualstudio.com/docs/python/debugging
-            // When set to true, activates debugging features specific to the Jinja templating framework.
-            "jinja": true,
-            // When omitted or set to true (the default), restricts debugging to user-written code only. Set to false to also enable debugging of standard library functions.
-            "justMyCode": false,
-            "env": {
-                "DYNAMODB_ENDPOINT_URL": "http://localhost:8000",
-                "ENVIRONMENT_NAME": "local",
-                "REGION_NAME": "local",
-                "AWS_ACCESS_KEY_ID": "fake",
-                "AWS_SECRET_ACCESS_KEY": "fake",
-                "AWS_SESSION_TOKEN": "fake"
-            },
-            "envFile": "${workspaceFolder}/.env"
-        },
-        {
-            "name": "Debug Slack Agent app.py",
-            "type": "debugpy",
-            "request": "launch",
-            // "module": "python",
-            "program": "${workspaceFolder}/app/app.py",
-            "jinja": true,
-            "justMyCode": false,
-            "env": {
-                "DYNAMODB_ENDPOINT_URL": "http://localhost:8000",
-                "ENVIRONMENT_NAME": "local",
-                "REGION_NAME": "local",
-                "AWS_ACCESS_KEY_ID": "fake",
-                "AWS_SECRET_ACCESS_KEY": "fake",
-                "AWS_SESSION_TOKEN": "fake"
-            },
-            "envFile": "${workspaceFolder}/.env"
-        },
-        {
             "name": "Python: Current File",
             "type": "debugpy",
             "request": "launch",
             "program": "${file}",
             "console": "integratedTerminal",
             "justMyCode": true,
-            "env": {
-                "PYTHONPATH": "${workspaceFolder}"
-            }
-        },
-        {
-            "name": "Python: Debug Tests",
-            "type": "debugpy",
-            "request": "launch",
-            "program": "${file}",
-            "purpose": [
-                "debug-test"
-            ],
-            "console": "integratedTerminal",
-            "justMyCode": false,
             "env": {
                 "PYTHONPATH": "${workspaceFolder}"
             }
@@ -103,26 +36,7 @@
             }
         },
         {
-            "name": "UV RUN Vectorstore MCP Discord",
-            "type": "debugpy",
-            "request": "launch",
-            "program": "${workspaceFolder}/scripts/vectorstore_mcp.py",
-            "args": [
-                "--module",
-                "discord",
-                "--stdio",
-                "--debug"
-            ],
-            "jinja": true,
-            "justMyCode": false,
-            "env": {
-                "PYTHONPATH": "${workspaceFolder}"
-            },
-            "envFile": "${workspaceFolder}/.env",
-            "python": "${workspaceFolder}/.venv/bin/python"
-        },
-        {
-            "name": "Debug src/oh_my_ai_docs/avectorstore_mcp.py",
+            "name": "(uv) Debug src/oh_my_ai_docs/avectorstore_mcp.py",
             "type": "debugpy",
             "request": "launch",
             "program": "${workspaceFolder}/src/oh_my_ai_docs/avectorstore_mcp.py",
@@ -209,10 +123,10 @@
                 "PYTHONPATH": "${workspaceFolder}",
                 "PYDEVD_DISABLE_FILE_VALIDATION": "1",
                 "PYTHONASYNCIODEBUG": "1",
-                "UV_ACTIVE_PYTHON": "${workspaceFolder}/.venv/bin/python"
+                // "UV_ACTIVE_PYTHON": "${workspaceFolder}/.venv/bin/python"
             },
-            "envFile": "${workspaceFolder}/.env",
-            "python": "${workspaceFolder}/.venv/bin/python",
+            // "envFile": "${workspaceFolder}/.env",
+            // "python": "${workspaceFolder}/.venv/bin/python",
         },
         // {
         //     "type": "node",
