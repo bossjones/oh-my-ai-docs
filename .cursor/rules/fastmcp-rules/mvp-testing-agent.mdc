@@ -1,0 +1,126 @@
+---
+description: This rule governs the essential MVP testing patterns for FastMCP servers. It should be applied whenever: (1) Creating new tests for FastMCP components, (2) Implementing basic TDD patterns, (3) Setting up minimal test environments, or (4) Verifying core functionality. The rule ensures consistent testing patterns and reliable verification of basic functionality across FastMCP server implementations.
+globs:
+alwaysApply: false
+---
+
+# FastMCP MVP Testing Patterns
+
+@python-tdd-auto.mdc should be used with this rule as well.
+
+## Critical Rules
+
+- ALWAYS use `@pytest.mark.anyio` for async tests
+- ALWAYS use `client_session` with async context management for client operations
+- ALWAYS test basic server instantiation before other functionality
+- ALWAYS include error handling tests for core functionality
+- ALWAYS use proper type hints in test functions
+- ALWAYS clean up resources in test teardown
+- NEVER skip testing error cases for core functionality
+- NEVER mix sync and async code incorrectly in tests
+
+## Examples
+
+<example>
+```python
+# Standard imports
+import pytest
+from mcp.server.fastmcp import FastMCP, Context
+from mcp.shared.memory import create_connected_server_and_client_session as client_session
+
+class TestServerMVP:
+    """MVP test suite for core FastMCP functionality."""
+
+    @pytest.mark.anyio
+    async def test_create_server(self):
+        """Test basic server instantiation."""
+        mcp = FastMCP(instructions="Server instructions")
+        assert mcp.name == "FastMCP"
+        assert mcp.instructions == "Server instructions"
+
+    @pytest.mark.anyio
+    async def test_basic_tool(self):
+        """Test basic tool registration and execution."""
+        mcp = FastMCP()
+
+        @mcp.tool()
+        def add(x: int, y: int) -> int:
+            return x + y
+
+        async with client_session(mcp._mcp_server) as client:
+            result = await client.call_tool("add", {"x": 1, "y": 2})
+            assert result.content[0].text == "3"
+
+    @pytest.mark.anyio
+    async def test_basic_resource(self):
+        """Test basic resource functionality."""
+        mcp = FastMCP()
+
+        @mcp.resource("resource://test")
+        def get_text() -> str:
+            return "Hello, world!"
+
+        async with client_session(mcp._mcp_server) as client:
+            result = await client.read_resource("resource://test")
+            assert result.contents[0].text == "Hello, world!"
+
+    @pytest.mark.anyio
+    async def test_error_handling(self):
+        """Test basic error handling."""
+        mcp = FastMCP()
+
+        @mcp.tool()
+        def error_tool() -> None:
+            raise ValueError("Test error")
+
+        async with client_session(mcp._mcp_server) as client:
+            result = await client.call_tool("error_tool", {})
+            assert result.isError is True
+            assert "Test error" in result.content[0].text
+
+    @pytest.mark.anyio
+    async def test_context_injection(self):
+        """Test basic context functionality."""
+        mcp = FastMCP()
+
+        @mcp.tool()
+        def context_tool(ctx: Context) -> str:
+            return f"Request {ctx.request_id}"
+
+        async with client_session(mcp._mcp_server) as client:
+            result = await client.call_tool("context_tool", {})
+            assert "Request" in result.content[0].text
+```
+</example>
+
+<example type="invalid">
+```python
+# ❌ Bad practices to avoid
+
+class TestBadPractices:
+    def test_no_anyio(self):  # Missing anyio marker
+        mcp = FastMCP()
+        result = mcp.do_something()  # Not async
+        assert result
+
+    @pytest.mark.anyio
+    async def test_no_cleanup(self):
+        mcp = FastMCP()
+        client = await mcp._mcp_server.connect()  # No context manager
+        result = await client.call_tool("tool", {})
+        # Missing client cleanup
+
+    def test_mixing_sync_async(self):
+        mcp = FastMCP()
+        result = await mcp.do_something()  # Mixing sync/async incorrectly
+        assert result
+
+    @pytest.mark.anyio
+    async def test_incomplete_error_check(self):
+        mcp = FastMCP()
+        try:
+            result = await mcp.do_something()
+        except:  # Too broad exception handling
+            pass  # No assertions on error
+```
+</example>

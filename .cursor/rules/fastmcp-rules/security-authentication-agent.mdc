@@ -1,0 +1,482 @@
+---
+description: This rule governs security and authentication implementation in FastMCP servers. It should be applied whenever: (1) Implementing authentication mechanisms, (2) Setting up API security, (3) Managing access control, (4) Handling sensitive data, or (5) Implementing security best practices. The rule ensures consistent security patterns, proper authentication flows, and robust protection mechanisms across all FastMCP server implementations.
+globs:
+alwaysApply: false
+---
+
+# FastMCP Security and Authentication Rules
+
+## Critical Rules
+
+1. **Authentication Implementation**
+   - Use secure authentication protocols
+   - Implement proper token management
+   - Handle authentication failures gracefully
+   - Support multiple auth methods
+   - Example:
+   ```python
+   # ✅ Good
+   from mcp.server.fastmcp import FastMCP, Security
+   from pydantic import BaseModel, SecretStr
+   from typing import Optional
+   import jwt
+   from datetime import datetime, timedelta
+
+   class AuthConfig(BaseModel):
+       secret_key: SecretStr
+       token_expire_minutes: int = 30
+       algorithm: str = "HS256"
+
+   class TokenData(BaseModel):
+       sub: str  # subject (user id)
+       exp: datetime
+       scope: list[str] = []
+
+   class SecurityManager:
+       def __init__(self, config: AuthConfig):
+           self._config = config
+           self._security = Security()
+
+       async def create_access_token(
+           self,
+           subject: str,
+           scopes: list[str] = []
+       ) -> str:
+           expires = datetime.utcnow() + timedelta(
+               minutes=self._config.token_expire_minutes
+           )
+           token_data = TokenData(
+               sub=subject,
+               exp=expires,
+               scope=scopes
+           )
+           return jwt.encode(
+               token_data.dict(),
+               self._config.secret_key.get_secret_value(),
+               algorithm=self._config.algorithm
+           )
+
+   # ❌ Bad
+   def bad_auth(user_id: str) -> str:
+       return f"token_{user_id}"  # Insecure token generation
+   ```
+
+2. **API Security**
+   - Implement rate limiting
+   - Use HTTPS/TLS
+   - Validate all inputs
+   - Handle errors securely
+   - Example:
+   ```python
+   # ✅ Good
+   from mcp.server.fastmcp import RateLimiter, Request
+   from pydantic import BaseModel, constr, validator
+   from typing import Any
+
+   class APIConfig(BaseModel):
+       rate_limit: int = 100  # requests per minute
+       strict_validation: bool = True
+       allowed_origins: list[str] = ["https://api.example.com"]
+
+   class SecureEndpoint:
+       def __init__(self, config: APIConfig):
+           self._config = config
+           self._rate_limiter = RateLimiter(
+               rate=config.rate_limit,
+               time_window=60
+           )
+
+       async def handle_request(
+           self,
+           request: Request
+       ) -> dict[str, Any]:
+           # Rate limiting
+           await self._rate_limiter.check_rate_limit(request.client_ip)
+
+           # CORS validation
+           origin = request.headers.get("origin")
+           if origin not in self._config.allowed_origins:
+               raise ValueError("Invalid origin")
+
+           # Input validation
+           try:
+               validated_data = self.validate_input(request.data)
+           except ValueError as e:
+               # Log attempt but don't expose details
+               logger.warning(
+                   "invalid_input",
+                   error=str(e),
+                   client_ip=request.client_ip
+               )
+               raise ValueError("Invalid input")
+
+           return await self.process_request(validated_data)
+
+   # ❌ Bad
+   @app.route("/api")
+   def bad_api(request: dict):
+       data = request.get("data", {})  # No validation
+       return process(data)  # No rate limiting or security
+   ```
+
+3. **Access Control**
+   - Implement role-based access control
+   - Use principle of least privilege
+   - Validate permissions consistently
+   - Support fine-grained access
+   - Example:
+   ```python
+   # ✅ Good
+   from enum import Enum
+   from typing import Protocol
+   from dataclasses import dataclass
+
+   class Permission(Enum):
+       READ = "read"
+       WRITE = "write"
+       ADMIN = "admin"
+
+   @dataclass
+   class Resource:
+       id: str
+       owner_id: str
+       permissions: dict[str, set[Permission]]
+
+   class AccessControl(Protocol):
+       async def check_permission(
+           self,
+           user_id: str,
+           resource: Resource,
+           required_permission: Permission
+       ) -> bool:
+           ...
+
+   class RBACManager:
+       async def check_access(
+           self,
+           user_id: str,
+           resource: Resource,
+           permission: Permission
+       ) -> bool:
+           # Check direct ownership
+           if resource.owner_id == user_id:
+               return True
+
+           # Check role-based permissions
+           user_permissions = resource.permissions.get(user_id, set())
+           if permission in user_permissions:
+               return True
+
+           # Check group permissions
+           user_groups = await self.get_user_groups(user_id)
+           for group in user_groups:
+               group_permissions = resource.permissions.get(f"group:{group}", set())
+               if permission in group_permissions:
+                   return True
+
+           return False
+
+   # ❌ Bad
+   def bad_access(user: dict, resource: dict) -> bool:
+       return user.get("admin", False)  # Overly simplistic
+   ```
+
+4. **Sensitive Data Handling**
+   - Encrypt sensitive data
+   - Use secure storage
+   - Implement data masking
+   - Handle data lifecycle
+   - Example:
+   ```python
+   # ✅ Good
+   from cryptography.fernet import Fernet
+   from pydantic import BaseModel, SecretStr
+   from typing import Optional
+   import base64
+
+   class SensitiveData(BaseModel):
+       data: SecretStr
+       encryption_key_id: str
+       created_at: datetime
+       expires_at: Optional[datetime] = None
+
+       class Config:
+           json_encoders = {
+               SecretStr: lambda v: "[REDACTED]"
+           }
+
+   class SecureStorage:
+       def __init__(self, encryption_key: str):
+           self._fernet = Fernet(base64.urlsafe_b64encode(
+               encryption_key.encode()
+           ))
+
+       async def store_sensitive_data(
+           self,
+           data: str,
+           ttl: Optional[int] = None
+       ) -> SensitiveData:
+           encrypted = self._fernet.encrypt(data.encode())
+           expires_at = None
+           if ttl:
+               expires_at = datetime.utcnow() + timedelta(seconds=ttl)
+
+           return SensitiveData(
+               data=SecretStr(encrypted.decode()),
+               encryption_key_id=self._key_id,
+               created_at=datetime.utcnow(),
+               expires_at=expires_at
+           )
+
+   # ❌ Bad
+   def bad_storage(data: str) -> None:
+       with open("secrets.txt", "a") as f:  # Plaintext storage
+           f.write(data + "\n")
+   ```
+
+5. **Security Best Practices**
+   - Implement secure headers
+   - Use secure defaults
+   - Follow security standards
+   - Regular security updates
+   - Example:
+   ```python
+   # ✅ Good
+   from mcp.server.fastmcp import FastMCP, SecurityMiddleware
+   from typing import Any
+
+   class SecurityConfig(BaseModel):
+       csrf_enabled: bool = True
+       secure_headers: bool = True
+       content_security_policy: dict[str, list[str]] = {
+           "default-src": ["'self'"],
+           "script-src": ["'self'", "'unsafe-inline'"],
+           "style-src": ["'self'", "'unsafe-inline'"],
+           "img-src": ["'self'", "data:", "https:"],
+       }
+
+   class SecureApp:
+       def __init__(self, config: SecurityConfig):
+           self.app = FastMCP()
+           self.config = config
+
+           # Security middleware
+           self.app.add_middleware(
+               SecurityMiddleware,
+               csrf_enabled=config.csrf_enabled,
+               secure_headers=config.secure_headers,
+               content_security_policy=config.content_security_policy
+           )
+
+       def configure_security(self) -> None:
+           # Secure cookie settings
+           self.app.config.cookie_httponly = True
+           self.app.config.cookie_secure = True
+           self.app.config.cookie_samesite = "Lax"
+
+           # Security headers
+           @self.app.middleware("http")
+           async def security_headers(request: Any, call_next: Any):
+               response = await call_next(request)
+               response.headers["X-Content-Type-Options"] = "nosniff"
+               response.headers["X-Frame-Options"] = "DENY"
+               response.headers["X-XSS-Protection"] = "1; mode=block"
+               return response
+
+   # ❌ Bad
+   app = FastMCP()  # No security configuration
+   ```
+
+## Examples
+
+# Security Implementation Examples
+
+# Standard library
+from typing import Optional, Any
+from datetime import datetime, timedelta
+
+# Third-party
+from pydantic import BaseModel, SecretStr, validator
+import jwt
+
+# MCP packages
+from mcp.server.fastmcp import FastMCP
+from mcp.server.fastmcp.security import Security, RateLimiter, JWTAuth
+from mcp.server.fastmcp.types import Request, Response
+from mcp.server.fastmcp.middleware import SecurityMiddleware
+from mcp.server.fastmcp.utilities.logging import get_logger
+
+# Complete Security Implementation
+from typing import Optional, Any
+from datetime import datetime, timedelta
+
+from pydantic import BaseModel, SecretStr
+import jwt
+
+from mcp.server.fastmcp import FastMCP
+from mcp.server.fastmcp.security import Security, JWTAuth
+from mcp.server.fastmcp.types import Request, Response
+from mcp.server.fastmcp.utilities.logging import get_logger
+
+logger = get_logger()
+
+# Security Configuration
+class SecurityConfig(BaseModel):
+    secret_key: SecretStr
+    token_expire_minutes: int = 30
+    rate_limit_per_minute: int = 100
+    allowed_origins: list[str]
+    cookie_secure: bool = True
+    cookie_httponly: bool = True
+
+# Security Manager
+class SecurityManager:
+    def __init__(self, config: SecurityConfig):
+        self._config = config
+        self._security = Security()
+        self._rate_limiter = RateLimiter(
+            rate=config.rate_limit_per_minute,
+            time_window=60
+        )
+
+    async def authenticate_request(
+        self,
+        request: Request
+    ) -> Optional[str]:
+        try:
+            token = self._extract_token(request)
+            if not token:
+                return None
+
+            payload = jwt.decode(
+                token,
+                self._config.secret_key.get_secret_value(),
+                algorithms=["HS256"]
+            )
+
+            if datetime.fromtimestamp(payload["exp"]) < datetime.utcnow():
+                return None
+
+            return payload["sub"]
+        except jwt.InvalidTokenError:
+            return None
+
+    async def create_token(
+        self,
+        user_id: str,
+        scopes: list[str] = []
+    ) -> str:
+        expires = datetime.utcnow() + timedelta(
+            minutes=self._config.token_expire_minutes
+        )
+        token_data = {
+            "sub": user_id,
+            "exp": expires,
+            "scope": scopes
+        }
+        return jwt.encode(
+            token_data,
+            self._config.secret_key.get_secret_value(),
+            algorithm="HS256"
+        )
+
+    def _extract_token(self, request: Request) -> Optional[str]:
+        auth_header = request.headers.get("Authorization")
+        if auth_header and auth_header.startswith("Bearer "):
+            return auth_header[7:]
+        return None
+
+# FastMCP Application
+app = FastMCP()
+config = SecurityConfig(
+    secret_key=SecretStr("your-secret-key"),
+    allowed_origins=["https://api.example.com"]
+)
+security = SecurityManager(config)
+
+@app.middleware("http")
+async def security_middleware(request: Request, call_next: Any):
+    # Rate limiting
+    await security._rate_limiter.check_rate_limit(request.client_ip)
+
+    # CORS check
+    origin = request.headers.get("origin")
+    if origin and origin not in config.allowed_origins:
+        return Response(
+            status_code=403,
+            content={"error": "Invalid origin"}
+        )
+
+    # Authentication
+    user_id = await security.authenticate_request(request)
+    request.state.user_id = user_id
+
+    # Security headers
+    response = await call_next(request)
+    response.headers.update({
+        "X-Content-Type-Options": "nosniff",
+        "X-Frame-Options": "DENY",
+        "X-XSS-Protection": "1; mode=block",
+        "Strict-Transport-Security": "max-age=31536000; includeSubDomains"
+    })
+
+    return response
+
+@app.post("/login")
+async def login(request: Request):
+    try:
+        data = await request.json()
+        user = await authenticate_user(data["username"], data["password"])
+        if not user:
+            return Response(
+                status_code=401,
+                content={"error": "Invalid credentials"}
+            )
+
+        token = await security.create_token(user.id)
+        return {"access_token": token, "token_type": "bearer"}
+    except Exception as e:
+        logger.error(
+            "login_error",
+            error=str(e),
+            client_ip=request.client_ip
+        )
+        return Response(
+            status_code=400,
+            content={"error": "Invalid request"}
+        )
+
+<example type="invalid">
+# Bad Security Implementation
+class BadSecurity:
+    def __init__(self):
+        self.tokens = {}  # Insecure token storage
+
+    def login(self, username: str, password: str):
+        if username == "admin" and password == "password":  # Hardcoded credentials
+            token = f"token_{username}"  # Insecure token
+            self.tokens[token] = username
+            return token
+        return None
+
+    def check_auth(self, request):
+        token = request.headers.get("token")  # No proper token extraction
+        return self.tokens.get(token)  # No validation
+
+app = FastMCP()
+security = BadSecurity()
+
+@app.post("/login")
+def bad_login(request):
+    data = request.json()  # No error handling
+    token = security.login(data["username"], data["password"])
+    if token:
+        return {"token": token}
+    return "error"  # No proper error response
+
+@app.get("/data")
+def get_data(request):
+    if security.check_auth(request):  # No proper authentication
+        return {"sensitive": "data"}  # No data protection
+    return "unauthorized"  # No proper error handling
+</example>

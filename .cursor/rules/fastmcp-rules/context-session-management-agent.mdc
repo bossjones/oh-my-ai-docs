@@ -1,0 +1,377 @@
+---
+description: This rule governs the implementation of context and session management in FastMCP servers. It should be applied whenever: (1) Implementing context handling, (2) Managing session state, (3) Implementing progress reporting, (4) Setting up logging patterns, or (5) Establishing client communication patterns. The rule ensures consistent context management, proper state handling, and efficient session management across all FastMCP server implementations.
+globs:
+alwaysApply: false
+---
+
+# FastMCP Context and Session Management Rules
+
+## Critical Rules
+
+1. **Context Object Structure**
+   - Use typed context objects
+   - Implement proper context initialization
+   - Handle context updates atomically
+   - Maintain context consistency
+   - Example:
+   ```python
+   # ✅ Good
+   from pydantic import BaseModel
+   from typing import Any, Optional
+
+   class SessionContext(BaseModel):
+       session_id: str
+       user_id: Optional[str]
+       metadata: dict[str, Any] = {}
+       state: dict[str, Any] = {}
+
+       def update_state(self, key: str, value: Any) -> None:
+           """Thread-safe state update."""
+           with self._lock:
+               self.state[key] = value
+
+   @app.route("/session")
+   async def handle_session(context: SessionContext) -> Response:
+       await context.update_state("last_access", datetime.now())
+       return Response(status=200, context=context)
+
+   # ❌ Bad
+   @app.route("/session")
+   def bad_session(context: dict):  # Untyped context
+       context["state"].update({})  # Unsafe updates
+       return {"status": "ok"}
+   ```
+
+2. **Session State Management**
+   - Implement proper state initialization
+   - Handle state transitions
+   - Manage state cleanup
+   - Use appropriate state storage
+   - Example:
+   ```python
+   # ✅ Good
+   from enum import Enum
+   from datetime import datetime, timedelta
+
+   class SessionState(Enum):
+       INITIALIZING = "initializing"
+       ACTIVE = "active"
+       IDLE = "idle"
+       TERMINATED = "terminated"
+
+   class SessionManager:
+       def __init__(self, timeout: timedelta = timedelta(minutes=30)):
+           self._sessions: dict[str, SessionContext] = {}
+           self._timeout = timeout
+
+       async def create_session(self, session_id: str) -> SessionContext:
+           context = SessionContext(
+               session_id=session_id,
+               state={"status": SessionState.INITIALIZING}
+           )
+           self._sessions[session_id] = context
+           return context
+
+       async def cleanup_expired(self) -> None:
+           now = datetime.now()
+           expired = [
+               sid for sid, ctx in self._sessions.items()
+               if now - ctx.state.get("last_access") > self._timeout
+           ]
+           for sid in expired:
+               await self.terminate_session(sid)
+
+   # ❌ Bad
+   class BadManager:
+       sessions = {}  # Global state
+       def new_session(self, id):
+           self.sessions[id] = {"active": True}  # No proper state management
+   ```
+
+3. **Progress Reporting**
+   - Implement standardized progress updates
+   - Handle long-running operations
+   - Provide meaningful progress information
+   - Support cancellation
+   - Example:
+   ```python
+   # ✅ Good
+   from typing import AsyncIterator
+   from dataclasses import dataclass
+
+   @dataclass
+   class ProgressUpdate:
+       total: int
+       completed: int
+       status: str
+       details: Optional[str] = None
+
+   async def process_with_progress(
+       context: SessionContext,
+       items: list[Any]
+   ) -> AsyncIterator[ProgressUpdate]:
+       total = len(items)
+       for i, item in enumerate(items, 1):
+           if context.state.get("cancelled"):
+               yield ProgressUpdate(
+                   total=total,
+                   completed=i,
+                   status="cancelled",
+                   details="Operation cancelled by user"
+               )
+               return
+
+           await process_item(item)
+           yield ProgressUpdate(
+               total=total,
+               completed=i,
+               status="processing"
+           )
+
+   # ❌ Bad
+   async def bad_progress(items):
+       for i, item in enumerate(items):
+           print(f"Progress: {i}")  # No structured progress
+           process(item)
+   ```
+
+4. **Logging Best Practices**
+   - Use structured logging
+   - Include context identifiers
+   - Implement proper log levels
+   - Handle sensitive information
+   - Example:
+   ```python
+   # ✅ Good
+   import structlog
+   from typing import Any
+
+   logger = structlog.get_logger()
+
+   class ContextLogger:
+       def __init__(self, context: SessionContext):
+           self._context = context
+           self._logger = logger.bind(
+               session_id=context.session_id,
+               user_id=context.user_id
+           )
+
+       def log(
+           self,
+           level: str,
+           event: str,
+           **kwargs: Any
+       ) -> None:
+           self._logger.log(
+               level,
+               event,
+               state=self._context.state.get("status"),
+               **kwargs
+           )
+
+   # ❌ Bad
+   def bad_logging(context, message):
+       print(f"Log: {message}")  # No structure or context
+   ```
+
+5. **Client Communication Patterns**
+   - Implement standardized message formats
+   - Handle connection lifecycle
+   - Manage bi-directional communication
+   - Support reconnection
+   - Example:
+   ```python
+   # ✅ Good
+   from pydantic import BaseModel
+   from typing import Literal
+
+   class ClientMessage(BaseModel):
+       type: Literal["request", "event", "heartbeat"]
+       session_id: str
+       payload: dict[str, Any]
+       sequence: int
+
+   class ServerMessage(BaseModel):
+       type: Literal["response", "event", "error"]
+       session_id: str
+       payload: dict[str, Any]
+       sequence: int
+
+   class ConnectionManager:
+       def __init__(self):
+           self._connections: dict[str, WebSocket] = {}
+
+       async def connect(
+           self,
+           session_id: str,
+           websocket: WebSocket
+       ) -> None:
+           await websocket.accept()
+           self._connections[session_id] = websocket
+
+       async def broadcast(
+           self,
+           message: ServerMessage,
+           exclude: set[str] | None = None
+       ) -> None:
+           exclude = exclude or set()
+           for sid, ws in self._connections.items():
+               if sid not in exclude:
+                   await ws.send_json(message.dict())
+
+   # ❌ Bad
+   class BadConnection:
+       def send(self, ws, data):
+           ws.send(str(data))  # No message structure
+   ```
+
+## Examples
+
+# Context and Session Management Examples
+
+# Standard library
+from typing import Optional, Dict, Any
+from datetime import datetime
+
+# Third-party
+from pydantic import BaseModel, Field
+import structlog
+
+# MCP packages
+from mcp.server.fastmcp import FastMCP, Context
+from mcp.server.fastmcp.session import Session, SessionManager
+from mcp.server.fastmcp.websocket import WebSocket, WebSocketManager
+from mcp.server.fastmcp.types import Message
+from mcp.server.fastmcp.utilities.logging import get_logger
+
+# Complete Context Implementation
+from typing import Optional, Dict
+from datetime import datetime
+
+from pydantic import BaseModel, Field
+
+from mcp.server.fastmcp import FastMCP, Context
+from mcp.server.fastmcp.session import Session, SessionManager
+from mcp.server.fastmcp.websocket import WebSocket
+from mcp.server.fastmcp.utilities.logging import get_logger
+
+<example>
+# Complete Context Management Implementation
+# Standard library
+from typing import Any, Optional
+from datetime import datetime
+
+# Third-party
+from pydantic import BaseModel
+import structlog
+
+# MCP packages
+from mcp.server.fastmcp import FastMCP
+from mcp.server.fastmcp.websocket import WebSocket
+
+# Context Models
+class SessionContext(BaseModel):
+    session_id: str
+    user_id: Optional[str]
+    created_at: datetime
+    last_active: datetime
+    state: dict[str, Any] = {}
+    metadata: dict[str, Any] = {}
+
+# Session Manager
+class SessionManager:
+    def __init__(self):
+        self._sessions: dict[str, SessionContext] = {}
+        self._logger = structlog.get_logger()
+
+    async def create_session(
+        self,
+        session_id: str,
+        user_id: Optional[str] = None
+    ) -> SessionContext:
+        context = SessionContext(
+            session_id=session_id,
+            user_id=user_id,
+            created_at=datetime.now(),
+            last_active=datetime.now()
+        )
+        self._sessions[session_id] = context
+        self._logger.info(
+            "session_created",
+            session_id=session_id,
+            user_id=user_id
+        )
+        return context
+
+    async def get_session(
+        self,
+        session_id: str
+    ) -> Optional[SessionContext]:
+        context = self._sessions.get(session_id)
+        if context:
+            context.last_active = datetime.now()
+        return context
+
+# FastMCP Application
+app = FastMCP()
+session_manager = SessionManager()
+
+@app.websocket("/ws/{session_id}")
+async def websocket_endpoint(
+    websocket: WebSocket,
+    session_id: str
+):
+    await websocket.accept()
+    context = await session_manager.get_session(session_id)
+
+    if not context:
+        context = await session_manager.create_session(session_id)
+
+    try:
+        while True:
+            data = await websocket.receive_json()
+            context.state.update(data)
+            await websocket.send_json({
+                "status": "updated",
+                "session_id": session_id,
+                "timestamp": datetime.now().isoformat()
+            })
+    except Exception as e:
+        structlog.get_logger().error(
+            "websocket_error",
+            session_id=session_id,
+            error=str(e)
+        )
+    finally:
+        await websocket.close()
+</example>
+
+<example type="invalid">
+# Bad Context Management Implementation
+class BadSession:
+    def __init__(self):
+        self.sessions = {}  # Global mutable state
+
+    def new_session(self, id):
+        self.sessions[id] = {
+            "active": True,
+            "data": {}
+        }
+
+    def update(self, id, data):
+        if id in self.sessions:
+            self.sessions[id]["data"] = data  # Unsafe updates
+
+@app.websocket("/ws/{id}")
+async def bad_websocket(ws, id):
+    session = BadSession()
+    session.new_session(id)
+
+    while True:
+        try:
+            data = await ws.receive_text()  # No proper message structure
+            session.update(id, data)  # No error handling
+            await ws.send_text("OK")  # No proper response format
+        except:
+            pass  # Silent failure
+</example>

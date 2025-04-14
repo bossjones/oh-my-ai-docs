@@ -1,0 +1,1 @@
+[Creating a Bot Account](https://discordpy.readthedocs.io/en/stable/discord.html): LLM should read this page when creating a Discord bot, setting up bot authentication, or generating OAuth2 invite URLs (Step-by-step guide to creating a Discord bot account, securing your bot token, and properly inviting your bot to servers with appropriate permissions)

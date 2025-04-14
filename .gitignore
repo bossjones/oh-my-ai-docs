@@ -385,3 +385,4 @@ bin/taplo
 Justfile.bak
 pyproject.toml.diff
 pyproject.toml.new
+*.parquet

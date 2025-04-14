@@ -1,0 +1,76 @@
+---
+description: 'This rule governs the naming conventions for pytest fixtures to avoid collisions with built-ins, modules, and other Python entities. It should be applied whenever generating code in the tests/*/*/* directory.'
+globs: tests/*/*/*
+alwaysApply: false
+---
+
+# Pytest Fixture Naming Standards
+
+## Critical Rules
+
+- Use descriptive prefixes to avoid collisions:
+  - `fixture_` for general fixtures, e.g., `fixture_database_connection`
+  - `mock_` for mock objects, e.g., `mock_api_response`
+  - `test_` for test-related fixtures, e.g., `test_user_data`
+
+- Use namespacing with underscores for clarity:
+  - `app_config_test`
+  - `db_connection_test`
+  - `api_client_test`
+
+- Use verb phrases for fixtures that perform actions:
+  - `setup_database`
+  - `create_test_user`
+  - `initialize_environment`
+
+- Use domain-specific prefixes for clarity:
+  - `discord_mock_client`
+  - `ai_mock_response`
+  - `env_mock_vars`
+
+- Indicate scope for temporary resources:
+  - `temp_file_function` for function-scoped
+  - `temp_db_module` for module-scoped
+  - `temp_config_session` for session-scoped
+
+## Examples
+
+<example>
+# Good - Descriptive and Scoped Naming
+```python
+@pytest.fixture
+ def fixture_database_connection():
+     # setup code
+     pass
+
+@pytest.fixture
+ def mock_api_response():
+     # setup code
+     pass
+
+@pytest.fixture
+ def setup_database():
+     # setup code
+     pass
+```
+</example>
+
+<example type="invalid">
+# Bad - Non-descriptive or Colliding Names
+```python
+@pytest.fixture
+ def db():
+     # setup code
+     pass
+
+@pytest.fixture
+ def response():
+     # setup code
+     pass
+
+@pytest.fixture
+ def setup():
+     # setup code
+     pass
+```
+</example>

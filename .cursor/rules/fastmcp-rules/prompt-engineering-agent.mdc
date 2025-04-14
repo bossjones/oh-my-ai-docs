@@ -1,0 +1,334 @@
+---
+description: This rule governs the design and implementation of FastMCP prompts. It should be applied whenever: (1) Creating new prompts, (2) Implementing prompt templates, (3) Managing prompt arguments, (4) Handling prompt rendering, or (5) Optimizing prompt performance. The rule ensures consistent prompt implementation, proper argument handling, and efficient prompt management across all FastMCP server implementations.
+globs:
+alwaysApply: false
+---
+
+# FastMCP Prompt Engineering Rules
+
+## Critical Rules
+
+1. **Prompt Structure Design**
+   - Use clear, descriptive prompt names
+   - Provide comprehensive descriptions
+   - Define explicit argument schemas
+   - Handle message roles correctly
+   - Example:
+   ```python
+   # ✅ Good
+   @app.prompt(name="generate_response")
+   async def generate_response(
+       user_input: str,
+       context: dict[str, Any],
+       style: Literal["formal", "casual"] = "formal"
+   ) -> list[Message]:
+       """Generate a contextual response based on user input.
+
+       Args:
+           user_input: The user's message to respond to
+           context: Additional context for response generation
+           style: Response style (formal/casual)
+
+       Returns:
+           List of messages forming the response
+       """
+       messages = [
+           UserMessage(content=user_input),
+           AssistantMessage(content=await generate_content(
+               user_input, context, style
+           ))
+       ]
+       return messages
+
+   # ❌ Bad
+   @app.prompt()
+   def generate(text: str) -> str:  # Missing type hints for return
+       # Missing docstring
+       # No argument validation
+       return f"Response to: {text}"  # No proper message structure
+   ```
+
+2. **Prompt Argument Handling**
+   - Use Pydantic models for complex arguments
+   - Implement proper validation
+   - Provide clear error messages
+   - Handle optional arguments appropriately
+   - Example:
+   ```python
+   # ✅ Good
+   from pydantic import BaseModel, Field
+
+   class ResponseConfig(BaseModel):
+       max_length: int = Field(gt=0, le=1000, description="Maximum response length")
+       temperature: float = Field(gt=0, le=2.0, description="Response creativity")
+       style: str = Field(
+           default="formal",
+           pattern="^(formal|casual|technical)$",
+           description="Response style"
+       )
+
+   @app.prompt()
+   async def structured_response(
+       prompt: str,
+       config: ResponseConfig
+   ) -> list[Message]:
+       try:
+           response = await generate_response(prompt, config)
+           return [
+               UserMessage(content=prompt),
+               AssistantMessage(content=response)
+           ]
+       except ValueError as e:
+           raise ValueError(f"Invalid prompt configuration: {e}")
+
+   # ❌ Bad
+   @app.prompt()
+   def unstructured_response(prompt: str, **kwargs):  # Untyped kwargs
+       return generate_response(prompt, **kwargs)  # No validation
+   ```
+
+3. **Message Role Management**
+   - Use appropriate message roles
+   - Maintain conversation context
+   - Handle multi-turn interactions
+   - Implement proper message sequencing
+   - Example:
+   ```python
+   # ✅ Good
+   @app.prompt()
+   async def conversation_prompt(
+       messages: list[dict[str, str]],
+       context: dict[str, Any]
+   ) -> list[Message]:
+       conversation = []
+       for msg in messages:
+           if msg["role"] == "user":
+               conversation.append(UserMessage(content=msg["content"]))
+           elif msg["role"] == "assistant":
+               conversation.append(AssistantMessage(content=msg["content"]))
+
+       # Add new response
+       response = await generate_response(conversation, context)
+       conversation.append(AssistantMessage(content=response))
+       return conversation
+
+   # ❌ Bad
+   @app.prompt()
+   def bad_conversation(messages: list) -> str:  # No type hints
+       return "\n".join(m["content"] for m in messages)  # No role handling
+   ```
+
+4. **Prompt Error Handling**
+   - Validate required arguments
+   - Handle rendering errors gracefully
+   - Provide clear error messages
+   - Implement proper error recovery
+   - Example:
+   ```python
+   # ✅ Good
+   @app.prompt()
+   async def safe_prompt(
+       template: str,
+       variables: dict[str, Any]
+   ) -> list[Message]:
+       try:
+           # Validate template
+           if not template or not isinstance(template, str):
+               raise ValueError("Invalid template")
+
+           # Validate variables
+           required_vars = extract_variables(template)
+           missing = required_vars - variables.keys()
+           if missing:
+               raise ValueError(f"Missing variables: {missing}")
+
+           # Render template
+           content = await render_template(template, variables)
+           return [AssistantMessage(content=content)]
+       except TemplateError as e:
+           raise ValueError(f"Template rendering failed: {e}")
+       except Exception as e:
+           raise ValueError(f"Prompt processing failed: {e}")
+
+   # ❌ Bad
+   @app.prompt()
+   def unsafe_prompt(template: str, **vars):
+       return template.format(**vars)  # No validation or error handling
+   ```
+
+5. **Prompt Performance Optimization**
+   - Implement caching for static prompts
+   - Use lazy rendering when appropriate
+   - Handle large prompt templates efficiently
+   - Implement proper cleanup
+   - Example:
+   ```python
+   # ✅ Good
+   from functools import lru_cache
+
+   @lru_cache(maxsize=100)
+   def get_static_template(template_name: str) -> str:
+       return load_template(template_name)
+
+   @app.prompt()
+   async def optimized_prompt(
+       template_name: str,
+       variables: dict[str, Any]
+   ) -> list[Message]:
+       template = get_static_template(template_name)
+       async with timeout(5.0):  # Prevent hanging
+           content = await render_template(template, variables)
+           return [AssistantMessage(content=content)]
+
+   # ❌ Bad
+   @app.prompt()
+   async def unoptimized_prompt(template_name: str, variables: dict):
+       template = await load_template(template_name)  # No caching
+       return template.format(**variables)  # No timeout
+   ```
+
+## Examples
+
+# Prompt Engineering Examples
+
+# Standard library
+from typing import List, Optional, Any
+import json
+
+# Third-party
+from pydantic import BaseModel, Field
+
+# MCP packages
+from mcp.server.fastmcp import FastMCP
+from mcp.server.fastmcp.prompts import Prompt, PromptTemplate
+from mcp.server.fastmcp.types import Message, UserMessage, AssistantMessage
+from mcp.server.fastmcp.utilities.logging import get_logger
+
+# Complete Prompt Implementation
+from typing import List, Optional
+import json
+
+from pydantic import BaseModel, Field
+
+from mcp.server.fastmcp import FastMCP
+from mcp.server.fastmcp.prompts import Prompt, PromptTemplate
+from mcp.server.fastmcp.types import Message, UserMessage, AssistantMessage
+from mcp.server.fastmcp.utilities.logging import get_logger
+
+<example>
+# Complete Prompt Implementation Example
+from mcp.server.fastmcp import FastMCP
+from mcp.server.fastmcp.types import Message, UserMessage, AssistantMessage
+from pydantic import BaseModel, Field
+from typing import Any, Literal
+from functools import lru_cache
+
+class ConversationConfig(BaseModel):
+    max_length: int = Field(gt=0, le=2000, description="Maximum response length")
+    style: Literal["formal", "casual", "technical"] = Field(
+        default="formal",
+        description="Conversation style"
+    )
+    temperature: float = Field(
+        default=0.7,
+        ge=0.0,
+        le=2.0,
+        description="Response creativity"
+    )
+
+@lru_cache(maxsize=100)
+def get_system_prompt(style: str) -> str:
+    prompts = {
+        "formal": "Respond in a professional and formal manner.",
+        "casual": "Respond in a friendly and casual tone.",
+        "technical": "Respond with technical precision and detail."
+    }
+    return prompts.get(style, prompts["formal"])
+
+app = FastMCP(name="PromptDemo")
+
+@app.prompt(name="conversation")
+async def handle_conversation(
+    messages: list[dict[str, str]],
+    config: ConversationConfig,
+    context: dict[str, Any] | None = None
+) -> list[Message]:
+    """Handle a multi-turn conversation with configurable style.
+
+    Args:
+        messages: List of conversation messages
+        config: Conversation configuration
+        context: Optional conversation context
+
+    Returns:
+        List of processed conversation messages
+    """
+    try:
+        # Validate and process messages
+        conversation = []
+        for msg in messages:
+            if not isinstance(msg, dict) or "role" not in msg or "content" not in msg:
+                raise ValueError("Invalid message format")
+
+            if msg["role"] == "user":
+                conversation.append(UserMessage(content=msg["content"]))
+            elif msg["role"] == "assistant":
+                conversation.append(AssistantMessage(content=msg["content"]))
+            else:
+                raise ValueError(f"Invalid role: {msg['role']}")
+
+        # Add system prompt based on style
+        system_prompt = get_system_prompt(config.style)
+
+        # Generate response
+        async with timeout(10.0):  # Prevent hanging
+            response = await generate_response(
+                conversation=conversation,
+                system_prompt=system_prompt,
+                max_length=config.max_length,
+                temperature=config.temperature,
+                context=context or {}
+            )
+
+        # Validate response length
+        if len(response) > config.max_length:
+            response = response[:config.max_length] + "..."
+
+        # Add response to conversation
+        conversation.append(AssistantMessage(content=response))
+        return conversation
+
+    except TimeoutError:
+        raise ValueError("Response generation timed out")
+    except ValueError as e:
+        raise ValueError(f"Invalid conversation data: {e}")
+    except Exception as e:
+        raise ValueError(f"Conversation processing failed: {e}")
+</example>
+
+<example type="invalid">
+# DON'T: Poor Prompt Implementation
+@app.prompt()
+def bad_prompt(text: str):
+    # Missing type hints
+    # No docstring
+    # No error handling
+    # No message structure
+    return f"Response: {text}"
+
+@app.prompt()
+async def another_bad_prompt(messages: list):
+    # No input validation
+    # No type hints
+    # No error handling
+    # No timeout protection
+    response = await generate(messages[-1])
+    return response
+
+@app.prompt()
+def insecure_prompt(template: str, **vars):
+    # Security vulnerability - arbitrary format string
+    # No input validation
+    # No error handling
+    return template.format(**vars)
+</example>

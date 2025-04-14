@@ -20,18 +20,20 @@
     },
     "files.associations": {
         "*.cheat": "markdown",
-        "Makefile.ci": "makefile"
+        "Makefile.ci": "makefile",
+        "*.just": "just"
     },
-    "pylint.interpreter": [
-        "${workspaceFolder}/.venv/bin/python3"
-    ],
-    "pylint.args": [
-        "--enable=F,E,E1101",
-        "--disable=C0111,E0401,C,W,E1205",
-        "--max-line-length=120",
-        "--load-plugins",
-        "pylint_pydantic,pylint_per_file_ignores"
-    ],
+    // "pylint.interpreter": [
+    //     "${workspaceFolder}/.venv/bin/python3"
+    // ],
+    // "pylint.args": [
+    //     "--enable=F,E,E1101",
+    //     "--disable=C0111,E0401,C,W,E1205",
+    //     "--max-line-length=120",
+    //     "--load-plugins",
+    //     "pylint_pydantic,pylint_per_file_ignores"
+    // ],
+    "pylint.enabled": false,
     "python.analysis.typeCheckingMode": "strict",
     "python.analysis.autoFormatStrings": true,
     "python.analysis.autoImportCompletions": true,

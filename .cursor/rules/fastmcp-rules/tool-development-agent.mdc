@@ -1,0 +1,573 @@
+---
+description: This rule governs the development and management of FastMCP tools. It should be applied whenever: (1) Creating new tools, (2) Implementing tool handlers, (3) Managing tool lifecycles, (4) Handling tool errors, or (5) Optimizing tool performance. The rule ensures consistent tool implementation, proper error handling, and efficient tool management across all FastMCP server implementations.
+globs:
+alwaysApply: false
+---
+
+# FastMCP Tool Development Rules
+
+## Critical Rules
+
+1. **Tool Function Design**
+   - Use clear, descriptive tool names in the decorator
+   - Always provide an explicit description in the tool decorator
+   - Ensure docstring complements (not duplicates) the tool description
+   - Implement proper type hints
+   - Handle context injection correctly
+   - Example:
+   ```python
+   # ✅ Good
+   @app.tool(
+       name="process_data",
+       description="Process a list of data items in batches with progress tracking and validation"
+   )
+   async def process_data(
+       data: list[str],
+       batch_size: int = 10,
+       ctx: Context
+   ) -> dict[str, Any]:
+       """Process data in batches with comprehensive error handling and progress reporting.
+
+       The tool handles data validation, batch processing, and provides detailed progress
+       updates through the context. It includes timeout handling and resource cleanup.
+
+       Args:
+           data: List of strings to process
+           batch_size: Size of each processing batch
+           ctx: Tool context for progress reporting
+
+       Returns:
+           Dictionary containing:
+           - processed: Number of successfully processed items
+           - results: List of processed results
+           - stats: Processing statistics
+       """
+       total = len(data)
+       results = []
+
+       for i in range(0, total, batch_size):
+           batch = data[i:i + batch_size]
+           results.extend(await process_batch(batch))
+           await ctx.report_progress(i + len(batch), total)
+
+       return {"processed": len(results), "results": results}
+
+   # ❌ Bad
+   @app.tool()  # Missing name and description
+   def process(d, size=10):  # Missing type hints
+       # Missing docstring
+       # No progress reporting
+       return [process_item(x) for x in d]
+
+   # ❌ Also Bad
+   @app.tool(
+       name="process_data",
+       description="Process data"  # Description too vague
+   )
+   def process_data(data: list):
+       """Process data"""  # Docstring duplicates description without adding value
+       return [process_item(x) for x in data]
+   ```
+
+2. **Tool Parameter Validation**
+   - Use Pydantic models for complex parameters
+   - Implement proper validation logic
+   - Provide clear validation error messages
+   - Handle default values appropriately
+   - Example:
+   ```python
+   # ✅ Good
+   from pydantic import BaseModel, Field
+
+   class ProcessingConfig(BaseModel):
+       batch_size: int = Field(gt=0, description="Batch size for processing")
+       timeout: float = Field(gt=0, description="Processing timeout in seconds")
+       retry_count: int = Field(ge=0, description="Number of retries on failure")
+
+   @app.tool()
+   async def process_with_config(
+       data: list[str],
+       config: ProcessingConfig,
+       ctx: Context
+   ) -> dict[str, Any]:
+       try:
+           async with timeout(config.timeout):
+               return await process_data(data, config)
+       except TimeoutError:
+           raise ValueError(f"Processing timed out after {config.timeout}s")
+
+   # ❌ Bad
+   @app.tool()
+   def process_unsafe(data, batch_size, timeout, retries):
+       # No parameter validation
+       # No type checking
+       # No error handling
+       return process_data(data, batch_size, timeout, retries)
+   ```
+
+3. **Tool Error Handling**
+   - Define and use specific error types for different failure scenarios
+   - Implement proper error context and chaining
+   - Ensure errors are properly logged and reported through context
+   - Handle async errors with proper cancellation
+   - Implement timeout handling for long-running operations
+   - Example:
+   ```python
+   # ✅ Good
+   from mcp.server.fastmcp.exceptions import (
+       ToolError,
+       ToolValidationError,
+       ToolTimeoutError,
+       ToolResourceError
+   )
+   from asyncio import TimeoutError, CancelledError
+
+   @app.tool()
+   async def safe_tool(data: dict[str, Any], ctx: Context) -> dict[str, Any]:
+       try:
+           # Log operation start
+           await ctx.info("Processing started", data={"input_size": len(data)})
+
+           # Handle timeouts explicitly
+           async with timeout(30):  # 30 second timeout
+               result = await process_data(data)
+
+           await ctx.info("Processing completed successfully")
+           return result
+
+       except ToolValidationError as e:
+           # Handle validation errors with specific guidance
+           await ctx.error("Data validation failed", data={
+               "error": str(e),
+               "validation_errors": e.errors(),
+               "received_data": data
+           })
+           raise ToolError(f"Invalid input data: {e}", cause=e)
+
+       except TimeoutError as e:
+           # Handle timeout with specific error type
+           await ctx.error("Operation timed out", data={
+               "timeout_seconds": 30,
+               "operation": "process_data"
+           })
+           raise ToolTimeoutError(
+               "Operation exceeded 30 second timeout",
+               operation="process_data",
+               timeout_seconds=30
+           ) from e
+
+       except CancelledError:
+           # Handle cancellation gracefully
+           await ctx.warning("Operation cancelled by user")
+           await cleanup_resources()  # Always cleanup
+           raise
+
+       except ToolResourceError as e:
+           # Handle resource-specific errors
+           await ctx.error("Resource error occurred", data={
+               "resource_type": e.resource_type,
+               "resource_id": e.resource_id,
+               "error": str(e)
+           })
+           raise
+
+       except Exception as e:
+           # Handle unexpected errors with full context
+           await ctx.error(
+               "Unexpected error during processing",
+               data={
+                   "error_type": type(e).__name__,
+                   "error_details": str(e),
+                   "input_data_keys": list(data.keys())
+               }
+           )
+           raise ToolError(
+               f"Processing failed: {type(e).__name__}: {e}",
+               cause=e
+           )
+
+       finally:
+           # Ensure resources are always cleaned up
+           try:
+               await cleanup_resources()
+           except Exception as e:
+               await ctx.error("Failed to cleanup resources", data={"error": str(e)})
+
+   # ❌ Bad
+   @app.tool()
+   async def unsafe_tool(data: dict):
+       try:
+           return await process_data(data)
+       except Exception as e:
+           # DON'T: Poor error handling
+           print(f"Error: {e}")  # Don't use print
+           return None  # Don't silently fail
+
+   @app.tool()
+   async def another_unsafe_tool(data: dict):
+       # DON'T: Missing error handling
+       result = await process_data(data)  # No try/except
+       return result  # No error handling or cleanup
+   ```
+
+4. **Tool Context Usage**
+   - Use context for structured logging and progress reporting
+   - Implement proper context state management
+   - Follow context lifecycle patterns
+   - Use context for dependency injection
+   - Leverage context for configuration access
+   - Example:
+   ```python
+   # ✅ Good
+   from contextlib import asynccontextmanager
+   from typing import AsyncIterator
+   from mcp.server.fastmcp.context import ContextState
+
+   class ProcessingState(ContextState):
+       """Tool-specific context state."""
+       current_batch: int = 0
+       total_batches: int = 0
+       processed_items: int = 0
+       failed_items: int = 0
+
+   @asynccontextmanager
+   async def processing_context(ctx: Context) -> AsyncIterator[ProcessingState]:
+       """Manage tool-specific context state."""
+       state = ProcessingState()
+       try:
+           ctx.set_state("processing", state)
+           yield state
+       finally:
+           await ctx.info("Final processing stats", data={
+               "processed": state.processed_items,
+               "failed": state.failed_items,
+               "batches": state.total_batches
+           })
+
+   @app.tool()
+   async def tool_with_context(
+       data: list[str],
+       batch_size: int,
+       ctx: Context
+   ) -> dict[str, Any]:
+       # Initialize context with metadata
+       ctx.set_metadata({
+           "operation": "batch_processing",
+           "input_size": len(data),
+           "batch_size": batch_size
+       })
+
+       # Use structured logging with context
+       await ctx.info("Starting batch processing", data={
+           "total_items": len(data),
+           "batch_size": batch_size,
+           "config": await ctx.get_config("processing")
+       })
+
+       async with processing_context(ctx) as state:
+           try:
+               # Setup batches
+               batches = list(chunk_data(data, batch_size))
+               state.total_batches = len(batches)
+
+               results = []
+               for i, batch in enumerate(batches):
+                   # Update state
+                   state.current_batch = i + 1
+
+                   # Log batch start with context
+                   await ctx.debug("Processing batch", data={
+                       "batch": i + 1,
+                       "size": len(batch),
+                       "remaining": len(batches) - i - 1
+                   })
+
+                   try:
+                       # Process with timeout from context config
+                       timeout_seconds = await ctx.get_config(
+                           "processing.timeout_seconds",
+                           default=30
+                       )
+                       async with timeout(timeout_seconds):
+                           batch_results = await process_batch(batch)
+
+                       # Update state and progress
+                       state.processed_items += len(batch_results)
+                       results.extend(batch_results)
+
+                       # Report progress through context
+                       await ctx.report_progress(
+                           current=state.processed_items,
+                           total=len(data),
+                           message=f"Processed batch {i + 1}/{len(batches)}"
+                       )
+
+                   except Exception as e:
+                       # Update failure stats
+                       state.failed_items += len(batch)
+                       await ctx.error(
+                           "Batch processing failed",
+                           data={
+                               "batch": i + 1,
+                               "error": str(e),
+                               "items_affected": len(batch)
+                           }
+                       )
+                       raise
+
+               # Final success log with full context
+               await ctx.info(
+                   "Processing completed successfully",
+                   data={
+                       "total_processed": state.processed_items,
+                       "total_failed": state.failed_items,
+                       "success_rate": (
+                           state.processed_items /
+                           (state.processed_items + state.failed_items)
+                       ) * 100
+                   }
+               )
+
+               return {
+                   "success": True,
+                   "results": results,
+                   "stats": {
+                       "processed": state.processed_items,
+                       "failed": state.failed_items,
+                       "total_batches": state.total_batches
+                   }
+               }
+
+           except Exception as e:
+               # Log failure with full context
+               await ctx.error(
+                   "Processing failed",
+                   data={
+                       "error": str(e),
+                       "current_batch": state.current_batch,
+                       "processed_so_far": state.processed_items,
+                       "failed_so_far": state.failed_items
+                   }
+               )
+               raise
+
+   # ❌ Bad
+   @app.tool()
+   def tool_without_context(data: list):
+       # DON'T: Using print statements
+       print("Starting processing...")
+
+       # DON'T: No structured logging
+       for item in data:
+           if process_item(item):
+               print("Success")
+           else:
+               print("Failed")  # No error context
+
+       # DON'T: No progress reporting
+       return {"done": True}  # No meaningful results
+
+   @app.tool()
+   async def tool_with_poor_context(data: list[str], ctx: Context):
+       # DON'T: Poor context usage
+       ctx.set_state("status", "running")  # Unstructured state
+
+       for item in data:
+           try:
+               await process_item(item)
+           except Exception as e:
+               # DON'T: Poor error logging
+               await ctx.error(str(e))  # Missing context
+               continue
+
+       # DON'T: Missing final stats
+       return {"status": "done"}
+   ```
+
+5. **Tool Performance Optimization**
+   - Implement proper async patterns
+   - Use batching for large operations
+   - Handle resource cleanup
+   - Implement timeouts
+   - Example:
+   ```python
+   # ✅ Good
+   @app.tool()
+   async def optimized_tool(
+       items: list[str],
+       batch_size: int = 10,
+       ctx: Context
+   ) -> dict:
+       async with AsyncResourceManager() as arm:
+           batches = [
+               items[i:i + batch_size]
+               for i in range(0, len(items), batch_size)
+           ]
+
+           async def process_batch(batch: list[str]) -> list:
+               async with timeout(30):  # Prevent hanging
+                   return await arm.process_items(batch)
+
+           results = []
+           for i, batch in enumerate(batches):
+               batch_result = await process_batch(batch)
+               results.extend(batch_result)
+               await ctx.report_progress(
+                   (i + 1) * batch_size,
+                   len(items)
+               )
+
+           return {"results": results}
+
+   # ❌ Bad
+   @app.tool()
+   async def unoptimized_tool(items: list):
+       # No batching
+       # No timeouts
+       # No resource management
+       return [await process_item(x) for x in items]
+   ```
+
+## Examples
+
+# Tool Development Examples
+
+# Standard library
+from typing import Optional, Dict, Any
+from pathlib import Path
+
+# Third-party
+from pydantic import BaseModel, Field
+
+# MCP packages
+from mcp.server.fastmcp import FastMCP, Context
+from mcp.server.fastmcp.tools import Tool, ToolManager, ToolConfig
+from mcp.server.fastmcp.types import Request, Response
+from mcp.server.fastmcp.utilities.logging import get_logger
+
+# Complete Tool Implementation
+from typing import Optional, Dict
+from pathlib import Path
+
+from pydantic import BaseModel, Field
+
+from mcp.server.fastmcp import FastMCP, Context
+from mcp.server.fastmcp.tools import Tool, ToolManager
+from mcp.server.fastmcp.utilities.logging import get_logger
+
+<example>
+# Complete Tool Implementation Example
+# Standard library
+from contextlib import asynccontextmanager
+from typing import Any, AsyncIterator
+
+# Third-party
+from pydantic import BaseModel, Field
+
+# MCP packages
+from mcp.server.fastmcp import FastMCP, Context
+
+class ProcessingConfig(BaseModel):
+    batch_size: int = Field(gt=0, le=100, description="Processing batch size")
+    timeout: float = Field(gt=0, le=60, description="Processing timeout")
+
+class ProcessingResult(BaseModel):
+    processed: int
+    failed: int
+    results: list[dict[str, Any]]
+
+@asynccontextmanager
+async def processing_session() -> AsyncIterator[Any]:
+    session = await create_processing_session()
+    try:
+        yield session
+    finally:
+        await session.cleanup()
+
+app = FastMCP(name="ToolDemo")
+
+@app.tool(name="process_data")
+async def process_data(
+    data: list[dict[str, Any]],
+    config: ProcessingConfig,
+    ctx: Context
+) -> ProcessingResult:
+    """Process data with comprehensive error handling and progress reporting.
+
+    Args:
+        data: List of data items to process
+        config: Processing configuration
+        ctx: Tool context for progress reporting
+
+    Returns:
+        ProcessingResult containing processing statistics and results
+    """
+    await ctx.info(f"Starting processing of {len(data)} items")
+    results = []
+    failed = 0
+
+    async with processing_session() as session:
+        batches = [
+            data[i:i + config.batch_size]
+            for i in range(0, len(data), config.batch_size)
+        ]
+
+        for i, batch in enumerate(batches):
+            try:
+                async with timeout(config.timeout):
+                    batch_results = await session.process_batch(batch)
+                    results.extend(batch_results)
+
+                await ctx.report_progress(
+                    (i + 1) * config.batch_size,
+                    len(data)
+                )
+                await ctx.debug(f"Processed batch {i+1}/{len(batches)}")
+            except TimeoutError:
+                await ctx.warning(f"Batch {i+1} timed out")
+                failed += len(batch)
+            except Exception as e:
+                await ctx.error(f"Error processing batch {i+1}: {e}")
+                failed += len(batch)
+
+    await ctx.info(
+        f"Processing completed: {len(results)} succeeded, {failed} failed"
+    )
+    return ProcessingResult(
+        processed=len(results),
+        failed=failed,
+        results=results
+    )
+</example>
+
+<example type="invalid">
+# DON'T: Poor Tool Implementation
+@app.tool()
+def bad_tool(items, config=None):
+    # Missing type hints
+    # No docstring
+    # No error handling
+    # No progress reporting
+    # No parameter validation
+    results = []
+    for item in items:
+        try:
+            results.append(process(item))
+        except:  # Bare except
+            pass  # Silent failure
+    return results
+
+@app.tool()
+async def another_bad_tool(data: list):
+    # Inefficient processing
+    # No batching
+    # No timeouts
+    # No context usage
+    return [await slow_process(x) for x in data]
+
+@app.tool()
+def insecure_tool(path: str):
+    # Security vulnerability
+    # No input validation
+    return open(path).read()  # File handle leak
+</example>

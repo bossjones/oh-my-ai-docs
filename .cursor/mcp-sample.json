@@ -1,0 +1,56 @@
+{
+  "mcpServers": {
+    "TAV2": {
+      "command": "env",
+      "args": [
+        "REPLACEME",
+        "npx",
+        "-y",
+        "tavily-mcp@0.1.3"
+      ]
+    },
+    "langgraph-docs-mcp": {
+      "command": "uvx",
+      "args": [
+        "--from",
+        "mcpdoc",
+        "mcpdoc",
+        "--urls",
+        "LangGraph:https://langchain-ai.github.io/langgraph/llms.txt LangChain:https://python.langchain.com/llms.txt",
+        "--transport",
+        "stdio",
+        "--port",
+        "8081",
+        "--host",
+        "localhost"
+      ]
+    },
+    "fastmcp-docs-mcp": {
+      "command": "uvx",
+      "args": [
+        "--from",
+        "mcpdoc",
+        "mcpdoc",
+        "--urls",
+        "fastmcp:https://modelcontextprotocol.io/llms-full.txt",
+        "--transport",
+        "stdio",
+        "--port",
+        "8081",
+        "--host",
+        "localhost"
+      ]
+    },
+    "dpytest-vectorstore-mcp": {
+      "command": "uv",
+      "args": [
+        "run",
+        "./scripts/vectorstore_mcp.py",
+        "--module",
+        "dpytest",
+        "--stdio",
+        "--debug"
+      ]
+    }
+  }
+}

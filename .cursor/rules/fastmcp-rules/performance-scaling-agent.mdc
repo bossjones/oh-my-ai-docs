@@ -1,0 +1,465 @@
+---
+description: This rule governs performance optimization and scaling patterns in FastMCP servers. It should be applied whenever: (1) Implementing performance-critical features, (2) Optimizing resource usage, (3) Implementing caching strategies, (4) Managing concurrent operations, or (5) Scaling server implementations. The rule ensures consistent performance patterns, efficient resource utilization, and scalable implementations across all FastMCP servers.
+globs:
+alwaysApply: false
+---
+
+# FastMCP Performance and Scaling Rules
+
+## Critical Rules
+
+1. **Async Operation Patterns**
+   - Use proper async/await patterns
+   - Handle concurrent operations
+   - Implement proper timeouts
+   - Manage task cancellation
+   - Example:
+   ```python
+   # ✅ Good
+   from mcp.server.fastmcp import FastMCP
+   from typing import Any
+   import asyncio
+   from contextlib import asynccontextmanager
+
+   class AsyncOperationManager:
+       def __init__(self, timeout: float = 30.0):
+           self._timeout = timeout
+           self._tasks: set[asyncio.Task] = set()
+
+       @asynccontextmanager
+       async def managed_operation(self):
+           task = asyncio.current_task()
+           self._tasks.add(task)
+           try:
+               yield
+           finally:
+               self._tasks.remove(task)
+
+       async def execute_with_timeout(
+           self,
+           coroutine: Any,
+           timeout: float | None = None
+       ) -> Any:
+           async with self.managed_operation():
+               return await asyncio.wait_for(
+                   coroutine,
+                   timeout or self._timeout
+               )
+
+       async def cancel_all(self) -> None:
+           tasks = list(self._tasks)
+           for task in tasks:
+               task.cancel()
+           await asyncio.gather(*tasks, return_exceptions=True)
+
+   # ❌ Bad
+   async def bad_async():
+       result = await long_operation()  # No timeout
+       await asyncio.sleep(0)  # Improper concurrency
+       return result
+   ```
+
+2. **Resource Caching Strategies**
+   - Implement proper cache invalidation
+   - Use appropriate cache backends
+   - Handle cache failures gracefully
+   - Monitor cache performance
+   - Example:
+   ```python
+   # ✅ Good
+   from mcp.server.fastmcp.cache import Cache
+   from typing import Any, Optional
+   from datetime import timedelta
+   import json
+
+   class CacheManager:
+       def __init__(self, cache: Cache):
+           self._cache = cache
+           self._metrics = CacheMetrics()
+
+       async def get_or_compute(
+           self,
+           key: str,
+           compute_fn: Any,
+           ttl: timedelta,
+           *args: Any,
+           **kwargs: Any
+       ) -> Any:
+           # Try cache first
+           try:
+               cached = await self._cache.get(key)
+               if cached is not None:
+                   self._metrics.record_hit(key)
+                   return json.loads(cached)
+           except Exception as e:
+               self._metrics.record_error(key, str(e))
+
+           # Compute if not found
+           self._metrics.record_miss(key)
+           value = await compute_fn(*args, **kwargs)
+
+           # Store in cache
+           try:
+               await self._cache.set(
+                   key,
+                   json.dumps(value),
+                   expire=int(ttl.total_seconds())
+               )
+           except Exception as e:
+               self._metrics.record_error(key, str(e))
+
+           return value
+
+   # ❌ Bad
+   class BadCache:
+       _cache = {}  # In-memory only
+       def get(self, key: str) -> Any:
+           return self._cache.get(key)  # No expiry
+   ```
+
+3. **Memory Management**
+   - Implement proper cleanup
+   - Monitor memory usage
+   - Handle memory limits
+   - Use memory-efficient patterns
+   - Example:
+   ```python
+   # ✅ Good
+   from typing import AsyncIterator, TypeVar, Generic
+   from dataclasses import dataclass
+   import psutil
+   import gc
+
+   T = TypeVar('T')
+
+   @dataclass
+   class MemoryMetrics:
+       used_bytes: int
+       total_bytes: int
+       percent: float
+
+   class MemoryManager(Generic[T]):
+       def __init__(
+           self,
+           max_memory_percent: float = 90.0,
+           cleanup_threshold: float = 80.0
+       ):
+           self._max_memory_percent = max_memory_percent
+           self._cleanup_threshold = cleanup_threshold
+
+       def get_memory_usage(self) -> MemoryMetrics:
+           process = psutil.Process()
+           memory_info = process.memory_info()
+           return MemoryMetrics(
+               used_bytes=memory_info.rss,
+               total_bytes=psutil.virtual_memory().total,
+               percent=(memory_info.rss / psutil.virtual_memory().total) * 100
+           )
+
+       async def process_with_memory_check(
+           self,
+           items: list[T],
+           process_fn: Any
+       ) -> AsyncIterator[T]:
+           for item in items:
+               metrics = self.get_memory_usage()
+
+               # Check memory threshold
+               if metrics.percent > self._max_memory_percent:
+                   raise MemoryError("Memory usage too high")
+
+               # Cleanup if needed
+               if metrics.percent > self._cleanup_threshold:
+                   gc.collect()
+
+               yield await process_fn(item)
+
+   # ❌ Bad
+   def bad_memory():
+       data = []
+       while True:
+           data.append(get_more_data())  # Unbounded memory growth
+   ```
+
+4. **Connection Management**
+   - Implement connection pooling
+   - Handle connection failures
+   - Monitor connection health
+   - Manage connection lifecycle
+   - Example:
+   ```python
+   # ✅ Good
+   from mcp.server.fastmcp.connections import ConnectionPool
+   from typing import AsyncIterator
+   from contextlib import asynccontextmanager
+
+   class ConnectionManager:
+       def __init__(
+           self,
+           pool_size: int = 10,
+           max_overflow: int = 5,
+           timeout: float = 30.0
+       ):
+           self._pool = ConnectionPool(
+               pool_size=pool_size,
+               max_overflow=max_overflow,
+               timeout=timeout
+           )
+
+       @asynccontextmanager
+       async def connection(self) -> AsyncIterator[Any]:
+           conn = await self._pool.acquire()
+           try:
+               yield conn
+           finally:
+               await self._pool.release(conn)
+
+       async def health_check(self) -> bool:
+           async with self.connection() as conn:
+               return await conn.ping()
+
+       async def cleanup(self) -> None:
+           await self._pool.close()
+           await self._pool.wait_closed()
+
+   # ❌ Bad
+   class BadConnections:
+       async def get_conn(self):
+           return await create_connection()  # No pooling
+   ```
+
+5. **Load Balancing**
+   - Implement proper load distribution
+   - Handle backend failures
+   - Monitor backend health
+   - Support dynamic scaling
+   - Example:
+   ```python
+   # ✅ Good
+   from enum import Enum
+   from typing import List, Optional
+   from dataclasses import dataclass
+   import random
+
+   class BackendStatus(Enum):
+       HEALTHY = "healthy"
+       DEGRADED = "degraded"
+       UNHEALTHY = "unhealthy"
+
+   @dataclass
+   class Backend:
+       id: str
+       host: str
+       port: int
+       weight: float = 1.0
+       status: BackendStatus = BackendStatus.HEALTHY
+
+   class LoadBalancer:
+       def __init__(self, check_interval: float = 60.0):
+           self._backends: List[Backend] = []
+           self._check_interval = check_interval
+
+       async def add_backend(self, backend: Backend) -> None:
+           self._backends.append(backend)
+
+       async def remove_backend(self, backend_id: str) -> None:
+           self._backends = [
+               b for b in self._backends
+               if b.id != backend_id
+           ]
+
+       async def get_backend(self) -> Optional[Backend]:
+           healthy_backends = [
+               b for b in self._backends
+               if b.status == BackendStatus.HEALTHY
+           ]
+           if not healthy_backends:
+               return None
+
+           # Weighted random selection
+           total_weight = sum(b.weight for b in healthy_backends)
+           r = random.uniform(0, total_weight)
+           upto = 0
+           for backend in healthy_backends:
+               upto += backend.weight
+               if upto > r:
+                   return backend
+
+           return healthy_backends[-1] if healthy_backends else None
+
+   # ❌ Bad
+   class BadBalancer:
+       backends = []  # No health checking
+       def get_backend(self):
+           return random.choice(self.backends)  # No weighting
+   ```
+
+## Examples
+
+# Performance and Scaling Examples
+
+# Standard library
+from typing import Optional, Dict, Any
+import asyncio
+from datetime import timedelta
+
+# Third-party
+from pydantic import BaseModel, Field
+import redis.asyncio as redis
+
+# MCP packages
+from mcp.server.fastmcp import FastMCP
+from mcp.server.fastmcp.cache import Cache, CacheConfig
+from mcp.server.fastmcp.connection import ConnectionPool, ConnectionConfig
+from mcp.server.fastmcp.utilities.logging import get_logger
+from mcp.server.fastmcp.connections import ConnectionPool
+from typing import AsyncIterator
+from contextlib import asynccontextmanager
+
+# Complete Performance Implementation
+from typing import Optional, Dict
+import asyncio
+from datetime import timedelta
+
+from pydantic import BaseModel, Field
+import redis.asyncio as redis
+
+from mcp.server.fastmcp import FastMCP
+from mcp.server.fastmcp.cache import Cache
+from mcp.server.fastmcp.connection import ConnectionPool
+from mcp.server.fastmcp.utilities.logging import get_logger
+
+logger = structlog.get_logger()
+
+# Performance Configuration
+class PerformanceConfig(BaseModel):
+    pool_size: int = 10
+    max_overflow: int = 5
+    connection_timeout: float = 30.0
+    operation_timeout: float = 60.0
+    cache_ttl: timedelta = timedelta(minutes=15)
+    max_memory_percent: float = 90.0
+
+# Performance Manager
+class PerformanceManager:
+    def __init__(self, config: PerformanceConfig):
+        self._config = config
+        self._conn_manager = ConnectionManager(
+            pool_size=config.pool_size,
+            max_overflow=config.max_overflow,
+            timeout=config.connection_timeout
+        )
+        self._cache_manager = CacheManager(Cache())
+        self._memory_manager = MemoryManager(
+            max_memory_percent=config.max_memory_percent
+        )
+        self._op_manager = AsyncOperationManager(
+            timeout=config.operation_timeout
+        )
+
+    async def process_request(
+        self,
+        operation_id: str,
+        data: Any
+    ) -> Any:
+        # Check cache first
+        cache_key = f"op:{operation_id}"
+        result = await self._cache_manager.get_or_compute(
+            cache_key,
+            self._process_operation,
+            self._config.cache_ttl,
+            operation_id,
+            data
+        )
+
+        return result
+
+    async def _process_operation(
+        self,
+        operation_id: str,
+        data: Any
+    ) -> Any:
+        # Get connection from pool
+        async with self._conn_manager.connection() as conn:
+            # Process with timeout and memory management
+            async with self._op_manager.managed_operation():
+                result = await self._memory_manager.process_with_memory_check(
+                    data,
+                    conn.process
+                )
+                return result
+
+    async def cleanup(self) -> None:
+        await self._conn_manager.cleanup()
+        await self._op_manager.cancel_all()
+
+# FastMCP Application
+app = FastMCP()
+config = PerformanceConfig()
+performance = PerformanceManager(config)
+
+@app.post("/process/{operation_id}")
+async def process_request(operation_id: str, request: Request):
+    try:
+        data = await request.json()
+        result = await performance.process_request(
+            operation_id,
+            data
+        )
+        return {"status": "success", "result": result}
+    except asyncio.TimeoutError:
+        logger.error("operation_timeout", operation_id=operation_id)
+        return Response(
+            status_code=408,
+            content={"error": "Operation timed out"}
+        )
+    except MemoryError:
+        logger.error("memory_error", operation_id=operation_id)
+        return Response(
+            status_code=507,
+            content={"error": "Insufficient memory"}
+        )
+    except Exception as e:
+        logger.error(
+            "processing_error",
+            operation_id=operation_id,
+            error=str(e)
+        )
+        return Response(
+            status_code=500,
+            content={"error": "Processing failed"}
+        )
+
+<example type="invalid">
+# Bad Performance Implementation
+class BadPerformance:
+    def __init__(self):
+        self.cache = {}  # In-memory cache
+        self.connections = []  # No connection pooling
+
+    async def process(self, operation_id: str, data: dict):
+        # No timeout handling
+        conn = await self.get_connection()
+
+        # No memory management
+        result = await conn.process(data)
+
+        # Basic caching without TTL
+        self.cache[operation_id] = result
+        return result
+
+    async def get_connection(self):
+        # Create new connection every time
+        return await create_connection()
+
+app = FastMCP()
+perf = BadPerformance()
+
+@app.post("/process/{operation_id}")
+async def bad_process(operation_id: str, request: Request):
+    try:
+        data = await request.json()
+        return await perf.process(operation_id, data)
+    except Exception as e:
+        return {"error": str(e)}  # Exposes internal errors
+</example>

@@ -1,0 +1,141 @@
+---
+description: "This rule governs the Test-Driven Development (TDD) workflow. It should be applied automatically whenever: (1) Implementing new features, (2) Fixing bugs, (3) Refactoring code, or (4) Working on story implementations. This ensures we follow proper TDD practices with continuous test feedback."
+globs: src/**/*.py, tests/**/*.py
+alwaysApply: true
+---
+
+# Python TDD Development Loop Standards
+
+## Critical Rules
+
+- ALWAYS follow the Red-Green-Refactor cycle:
+  1. Write failing test(s) first (Red)
+  2. Implement minimal code to make tests pass (Green)
+  3. Refactor while keeping tests green
+  4. Repeat until feature is complete
+
+- ALWAYS run tests in continuous feedback loop:
+  ```bash
+  uv run pytest -s --verbose --showlocals --tb=short {test_path}
+  ```
+
+- Test command MUST include:
+  * `-s`: Show print statements
+  * `--verbose`: Detailed test information
+  * `--showlocals`: Show local variables on failure
+  * `--tb=short`: Concise tracebacks
+
+- Development Loop Steps:
+  1. Start with failing test
+  2. Run test command and observe failure
+  3. Implement/fix code
+  4. Run test command again
+  5. If tests fail, go to step 3
+  6. If tests pass, either:
+     * Add next test if feature incomplete
+     * Refactor if needed
+     * Move to next feature if complete
+
+- When implementing stories:
+  * Break story into testable units
+  * Write tests for each unit
+  * Follow dev loop for each unit
+  * Integration tests after units complete
+
+- Test Organization:
+  * Unit tests in `tests/test_*/test_*.py`
+  * Integration tests in `tests/integration/test_*.py`
+  * Each test file matches source file structure
+
+- Test Isolation:
+  * Each test must be independent
+  * Use fixtures for setup/teardown
+  * Mock external dependencies
+  * Reset state between tests
+
+## Examples
+
+<example>
+# Good - Following TDD Loop
+```python
+# Step 1: Write failing test
+def test_quota_check():
+    """Test that quota check works correctly."""
+    # Arrange
+    quota = QuotaManager(max_size=100)
+
+    # Act & Assert
+    assert quota.check_quota(50) is True
+    assert quota.check_quota(150) is False
+
+# Step 2: Run test (it fails)
+# $ uv run pytest -s --verbose --showlocals --tb=short tests/test_storage/test_quotas.py::test_quota_check
+
+# Step 3: Implement minimal code
+class QuotaManager:
+    def __init__(self, max_size: int):
+        self.max_size = max_size
+
+    def check_quota(self, size: int) -> bool:
+        return size <= self.max_size
+
+# Step 4: Run test again (it passes)
+# Step 5: Add next test or refactor
+```
+
+# Good - Story Implementation Loop
+```python
+# 1. Break story into units
+# - Quota initialization
+# - Basic quota checks
+# - User quota tracking
+# - Total quota management
+
+# 2. Start with first unit
+def test_quota_initialization():
+    """Test quota manager initialization."""
+    quota = QuotaManager(Path("/tmp/storage"))
+    assert quota.storage_root == Path("/tmp/storage")
+    assert isinstance(quota.config, QuotaConfig)
+
+# 3. Run test, implement, repeat
+# $ uv run pytest -s --verbose --showlocals --tb=short tests/test_storage/test_quotas.py::test_quota_initialization
+
+# 4. Move to next unit after passing
+def test_basic_quota_check():
+    """Test basic quota checking."""
+    # ... next test
+```
+</example>
+
+<example type="invalid">
+# Bad - Not Following TDD Loop
+```python
+# BAD: Writing implementation before tests
+class QuotaManager:
+    def __init__(self, storage_root: Path):
+        self.storage_root = storage_root
+        self.config = QuotaConfig()
+
+    def check_quota(self, size: int) -> bool:
+        return self.get_total_size() + size <= self.config.max_size
+
+# BAD: Writing tests after implementation
+def test_quota_manager():
+    """Test quota manager after the fact."""
+    quota = QuotaManager(Path("/tmp"))
+    assert quota.check_quota(100)
+```
+
+# Bad - Skipping Dev Loop Steps
+```python
+# BAD: Multiple tests without running loop
+def test_quota_feature():
+    """Test entire quota feature at once."""
+    quota = QuotaManager()
+    assert quota.check_user_quota(user_id, size)
+    assert quota.check_total_quota(size)
+    assert quota.get_quota_status()
+    # ... many more assertions without running tests
+```
+</example>
