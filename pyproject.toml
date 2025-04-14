@@ -546,7 +546,7 @@
 
         # Add banned-imports rule
         [tool.ruff.lint.flake8-import-conventions]
-            banned-from = ["unittest.mock"]
+            banned-from = ["unittest", "unittest.mock"]
 
 [tool.tomlsort]
     all = true

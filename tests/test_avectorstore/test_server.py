@@ -8,7 +8,7 @@
 from __future__ import annotations
 
 import pytest
-from pytest_mock import MockerFixture
+from pytest_mock import MockerFixture, AsyncMockType, MockType
 from pathlib import Path
 from typing import Any, Dict, TypeVar, cast, Optional
 from collections.abc import Awaitable, Mapping
@@ -32,9 +32,9 @@ from oh_my_ai_docs.avectorstore_mcp import (
 class MockContext(Context[Any, Any]):
     """Mock context for testing that extends the actual Context class."""
 
-    info_fn: Callable[[str], Awaitable[None]] = Field(default=None)
-    error_fn: Callable[[str], Awaitable[None]] = Field(default=None)
-    report_progress_fn: Callable[[int, int], Awaitable[None]] = Field(default=None)
+    info_fn: Callable[[str], Awaitable[None]] | None = Field(default=None)
+    error_fn: Callable[[str], Awaitable[None]] | None = Field(default=None)
+    report_progress_fn: Callable[[int, int], Awaitable[None]] | None = Field(default=None)
     app_context: Any = Field(default=None)
     mock_request_id: str = Field(default="test-request-id")
 
@@ -45,21 +45,22 @@ class MockContext(Context[Any, Any]):
 
     async def info(self, message: str) -> None:
         """Send info message."""
-        if self.info_fn:
+        if self.info_fn is not None:
             await self.info_fn(message)
 
     async def error(self, message: str) -> None:
         """Send error message."""
-        if self.error_fn:
+        if self.error_fn is not None:
             await self.error_fn(message)
 
     async def report_progress(self, current: int, total: int) -> None:
         """Report progress."""
-        if self.report_progress_fn:
+        if self.report_progress_fn is not None:
             await self.report_progress_fn(current, total)
 
     def model_dump(self) -> dict[str, Any]:
         """Override model_dump to include our custom attributes."""
+        # Access model_fields from the class instead of instance
         return {
             "info": self.info_fn,
             "error": self.error_fn,
@@ -102,9 +103,9 @@ class TestAVectorStoreMCPServer:
             Generator yielding mocked Context with Any types
         """
         # Create AsyncMock objects for the async methods
-        info_mock = mocker.AsyncMock(name="info")
-        error_mock = mocker.AsyncMock(name="error")
-        progress_mock = mocker.AsyncMock(name="report_progress")
+        info_mock: mocker.AsyncMock = mocker.AsyncMock(name="info")
+        error_mock: mocker.AsyncMock = mocker.AsyncMock(name="error")
+        progress_mock: mocker.AsyncMock = mocker.AsyncMock(name="report_progress")
 
         # Create app context with store
         app_context = mocker.MagicMock()
@@ -307,7 +308,7 @@ class TestAVectorStoreMCPServer:
         assert isinstance(resource, FunctionResource)
 
         # Get the actual content by calling the resource function
-        content = resource.fn()
+        content: str = resource.fn()
         assert isinstance(content, str)
         assert content == "Test documentation content"
 
