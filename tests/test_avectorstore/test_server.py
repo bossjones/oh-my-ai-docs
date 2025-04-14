@@ -203,7 +203,7 @@ class TestAVectorStoreMCPServer:
         # Check parameters structure
         params = tool.parameters.get("properties", {})
         assert "query" in params
-        assert "config" in params
+        # assert "config" in params
         assert params["query"]["type"] == "string"
 
     @pytest.mark.anyio
@@ -226,8 +226,6 @@ class TestAVectorStoreMCPServer:
             "query_docs",
             {
                 "query": "test query",
-                "config": QueryConfig(k=3, min_relevance_score=0.0).model_dump(),
-                "ctx": mock_context
             },
             context=mock_context
         )
@@ -510,8 +508,8 @@ class TestAVectorStoreMCPServer:
                 "query_docs",
                 {
                     "query": "   ",  # Empty query with whitespace
-                    "config": QueryConfig().model_dump(),
-                    "ctx": mock_context
+                    # "config": QueryConfig().model_dump(),
+                    # "ctx": mock_context
                 },
                 context=mock_context
             )

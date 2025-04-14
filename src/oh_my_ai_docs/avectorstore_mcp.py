@@ -34,6 +34,7 @@ from mcp import ClientSession, StdioServerParameters
 from mcp.server.fastmcp import Context, FastMCP
 from mcp.server.fastmcp.exceptions import ResourceError
 from mcp.server.fastmcp.utilities.logging import get_logger
+from mcp.server.session import ServerSession
 from mcp.types import (
     TextContent,
 )
@@ -199,7 +200,7 @@ class QueryConfig(BaseModel):
         return v
 
 
-def get_vectorstore_path():
+def get_vectorstore_path() -> Path:
     return DOCS_PATH / args.module / "vectorstore" / f"{args.module}_vectorstore.parquet"
 
 
@@ -256,14 +257,14 @@ async def query_tool(query: str) -> DocumentResponse:
         ValueError: If the query string is empty or invalid
         TimeoutError: If the query operation takes longer than 30 seconds
     """
-    ctx = mcp_server.request_context()
+    ctx: Context[ServerSession, object] = mcp_server.get_context()
     if not query.strip():
         await ctx.error("Query cannot be empty")
         raise ValueError("Query cannot be empty")
 
     config = QueryConfig()
 
-    vectorstore_path = DOCS_PATH / args.module / "vectorstore" / f"{args.module}_vectorstore.parquet"
+    vectorstore_path = get_vectorstore_path()
 
     state: AppContext = cast(AppContext, ctx.request_context.lifespan_context)
     await ctx.debug(f"state: {state}")
@@ -323,25 +324,25 @@ async def get_all_docs(module: str) -> str:
     Raises:
         ResourceError: If the module doesn't match or if there's an error reading the documentation
     """
-    ctx = mcp_server.request_context()
+    ctx: Context[ServerSession, object] = mcp_server.get_context()
     # import bpdb; bpdb.set_trace()
     try:
-        # logger.info(f"Retrieving documentation for module: {module}")
+        await ctx.info(f"Retrieving documentation for module: {module}")
 
         if module != args.module:
-            # logger.error("Module mismatch", extra={"requested_module": module, "server_module": args.module})
+            await ctx.error("Module mismatch", extra={"requested_module": module, "server_module": args.module})
             raise ResourceError(f"Requested module '{module}' does not match server module '{args.module}'")
 
         # Local path to the documentation
         doc_path = DOCS_PATH / module / f"{module}_docs.txt"
 
         if not doc_path.exists():
-            # logger.error("Documentation file not found", extra={"doc_module": module, "path": str(doc_path)})
+            await ctx.error("Documentation file not found", extra={"doc_module": module, "path": str(doc_path)})
             raise ResourceError(f"Documentation file not found for module: {module}")
 
         async with aiofiles.open(doc_path) as file:
             content = await file.read()
-            # logger.info("Successfully read documentation", extra={"doc_module": module, "size": len(content)})
+            await ctx.info("Successfully read documentation", extra={"doc_module": module, "size": len(content)})
             return content
 
     except ResourceError:

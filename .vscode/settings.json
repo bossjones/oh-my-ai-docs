@@ -43,8 +43,15 @@
     "python.terminal.activateEnvInCurrentTerminal": true,
     "files.exclude": {
         "**/__pycache__": true,
+        "**/.coverage.*": true,
+        "**/.mypy_cache": true,
+        "**/.pytest_cache": true,
+        "**/.venv": true,
+        "**/*.egg-info": true,
         "**/*.pyc": true,
-        "**/pycache": true
+        "**/~$*": true,
+        "**/htmlcov": true,
+        "**/pycache": true,
     },
     // Editor settings for Python files
     "editor.formatOnSave": true,
@@ -151,11 +158,12 @@
     "python.testing.unittestEnabled": false,
     "python.testing.pytestEnabled": true,
     "python.testing.pytestArgs": [
-        "-s",
-        "--verbose",
-        "--showlocals",
-        "--tb=short",
+        "tests"
+        // "-s",
+        // "--verbose",
+        // "--showlocals",
+        // "--tb=short",
     ],
-    "python.testing.cwd": "${workspaceFolder}/tests",
+    "python.testing.cwd": "${workspaceFolder}",
     "python.testing.autoTestDiscoverOnSaveEnabled": true,
 }

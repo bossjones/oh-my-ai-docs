@@ -130,26 +130,17 @@
             },
             "envFile": "${workspaceFolder}/.env",
             "python": "${workspaceFolder}/.venv/bin/python3",
-            "cwd": "${workspaceFolder}"
+            "cwd": "${workspaceFolder}/tests"
         },
-        // {
-        //     "type": "node",
-        //     "request": "launch",
-        //     "name": "Run Inspector with npx on vectorstore_mcp.py",
-        //     "runtimeExecutable": "npx",
-        //     "args": [
-        //         "-y",
-        //         "@modelcontextprotocol/inspector",
-        //         "uv",
-        //         "run",
-        //         "${workspaceFolder}/scripts/vectorstore_mcp.py",
-        //         "--module",
-        //         "discord",
-        //         "--stdio",
-        //         "--debug"
-        //     ],
-        //     "console": "integratedTerminal",
-        //     "internalConsoleOptions": "neverOpen"
-        // },
+        {
+            "name": "uv+pytest",
+            "justMyCode": false,
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${workspaceFolder}/.venv/bin/pytest", //path to your venv's pytest bin
+            "python": "${command:python.interpreterPath}", // assuming the correct interpreter is already selected in VSC
+            "console": "integratedTerminal",
+            "args": "tests" // path to the test you want to run; can be a list; these are the args passed to pytest
+        }
     ]
 }

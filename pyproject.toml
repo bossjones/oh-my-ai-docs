@@ -311,6 +311,7 @@
         markers = [
             "agenticonly: marks tests that run code that utilizes the agentic module (deselect with '-m \"not agenticonly\"')",
             "aidergenerated: marks tests that are aider generated (deselect with '-m \"not aidergenerated\"')",
+            "anyio: marks tests that run code that utilizes the anyio module (deselect with '-m \"not anyio\"')",
             "asynciotyper: marks tests that are asyncio typer generated (deselect with '-m \"not asynciotyper\"')",
             "chatbotonly: marks tests that run code that utilizes the chatbot module (deselect with '-m \"not chatbotonly\"')",
             "cli: marks tests that are cli generated (deselect with '-m \"not cli\"')",
