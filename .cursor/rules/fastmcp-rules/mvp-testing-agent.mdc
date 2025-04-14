@@ -1,6 +1,6 @@
 ---
-description: This rule governs the essential MVP testing patterns for FastMCP servers. It should be applied whenever: (1) Creating new tests for FastMCP components, (2) Implementing basic TDD patterns, (3) Setting up minimal test environments, or (4) Verifying core functionality. The rule ensures consistent testing patterns and reliable verification of basic functionality across FastMCP server implementations.
-globs:
+description: "This rule governs the essential MVP testing patterns for FastMCP servers. It should be applied whenever: (1) Creating new tests for FastMCP components, (2) Implementing basic TDD patterns, (3) Setting up minimal test environments, or (4) Verifying core functionality. The rule ensures consistent testing patterns and reliable verification of basic functionality across FastMCP server implementations."
+globs: tests/**/*.py
 alwaysApply: false
 ---
 
@@ -10,117 +10,381 @@ alwaysApply: false
 
 ## Critical Rules
 
+### Test Infrastructure
+- ALWAYS use `create_connected_server_and_client_session` alias as `client_session`
+- ALWAYS ensure proper server instance handling via `mcp._mcp_server`
+- ALWAYS use in-memory connections for test isolation
+- NEVER use real network connections in tests
+- NEVER share server instances between tests
+
+### Test Structure and Organization
+- ALWAYS organize tests by component functionality
+- ALWAYS use descriptive test names that indicate what is being tested
+- ALWAYS include docstrings in test classes and methods
+- NEVER mix different component tests in the same class
+
+### Async Testing
 - ALWAYS use `@pytest.mark.anyio` for async tests
-- ALWAYS use `client_session` with async context management for client operations
-- ALWAYS test basic server instantiation before other functionality
-- ALWAYS include error handling tests for core functionality
-- ALWAYS use proper type hints in test functions
+- ALWAYS use async context managers for resource management
+- ALWAYS await async operations properly
+- NEVER mix sync and async code in the same test
+- NEVER use bare `asyncio` calls when `pytest.mark.anyio` is available
+
+### Resource Management
+- ALWAYS use context managers for resource cleanup
+- ALWAYS use temporary resources for file/network operations
 - ALWAYS clean up resources in test teardown
-- NEVER skip testing error cases for core functionality
-- NEVER mix sync and async code incorrectly in tests
+- ALWAYS test resource registration using `@mcp.resource`
+- ALWAYS verify resource content and iteration patterns
+- ALWAYS test resource cleanup in async contexts
+- NEVER leave resources uncleaned between tests
+- NEVER use global resources without proper isolation
+
+### Mocking Philosophy
+- ALWAYS prefer real implementations over mocks when practical
+- ALWAYS limit mocking to external side effects (logging, file I/O)
+- ALWAYS use proper mock assertions when mocks are needed
+- NEVER mock core FastMCP functionality
+- NEVER use mocks just to simplify tests
+
+### Type Safety
+- ALWAYS include proper type hints in test functions
+- ALWAYS test with typed parameters and return values
+- ALWAYS verify type compatibility in interface tests
+- NEVER use `Any` type in test code
+- NEVER ignore type checking in tests
+
+### Test Coverage
+- ALWAYS include happy path and error path tests
+- ALWAYS test boundary conditions
+- ALWAYS include integration tests for component interaction
+- NEVER test only the happy path
+- NEVER skip error handling tests
+
+### Client-Server Testing
+- ALWAYS use `client_session` for client-server tests
+- ALWAYS test connection lifecycle (connect, operate, disconnect)
+- ALWAYS verify request-response patterns
+- ALWAYS test client tool invocation patterns
+- ALWAYS test client response handling
+- ALWAYS test client error scenarios
+- ALWAYS test client connection states
+- NEVER leave connections open between tests
+- NEVER skip testing error conditions in client-server communication
+
+### Context Testing
+- ALWAYS test context detection and injection explicitly
+- ALWAYS verify all required context attributes (e.g., request_id)
+- ALWAYS test all logging levels systematically (debug, info, warning, error)
+- ALWAYS test both required and optional context scenarios
+- ALWAYS verify context resource access patterns
+- ALWAYS test context resource iteration (`r_iter = await ctx.read_resource()`)
+- ALWAYS test optional context parameters
+- NEVER skip testing context attribute validation
+- NEVER assume context attributes without verification
+
+### Tool Testing
+- ALWAYS test tool registration using `mcp._tool_manager.add_tool`
+- ALWAYS test tool parameter detection
+- ALWAYS test tool return value handling
+- ALWAYS test tool async/sync compatibility
+- NEVER skip tool registration verification
+- NEVER assume tool parameters without testing
+
+### Integration Testing
+- ALWAYS test tool-resource interactions
+- ALWAYS test context-resource interactions
+- ALWAYS test client-server communication patterns
+- ALWAYS test end-to-end workflows
+- NEVER test components in isolation only
+- NEVER skip integration scenarios
+
+### Documentation
+- ALWAYS include proper test docstring formats
+- ALWAYS follow proper test class organization
+- ALWAYS use proper test method naming
+- ALWAYS use proper test assertion patterns
+- NEVER skip documentation in test code
+- NEVER use unclear test names or organization
+
+### Client Session Testing
+- ALWAYS verify connection state at each lifecycle stage
+- ALWAYS test session cleanup and resource release
+- ALWAYS verify client session isolation between tests
+- ALWAYS test session reconnection scenarios
+- ALWAYS verify session state after errors
+- NEVER leave sessions in inconsistent states
+- NEVER skip session lifecycle verification
+
+### Verification Layers
+- ALWAYS implement all verification layers:
+  * Context detection and injection
+  * Context attributes and properties
+  * Functionality (logging, resources)
+  * Async/sync compatibility
+  * Error scenarios and recovery
+- ALWAYS verify each layer independently
+- ALWAYS test layer interactions
+- NEVER skip verification layers
+- NEVER combine layer verifications without proper isolation
 
 ## Examples
 
 <example>
 ```python
-# Standard imports
+# Good practices demonstrated
 import pytest
+from typing import AsyncIterator
 from mcp.server.fastmcp import FastMCP, Context
 from mcp.shared.memory import create_connected_server_and_client_session as client_session
+from unittest.mock import patch
 
-class TestServerMVP:
-    """MVP test suite for core FastMCP functionality."""
+class TestServerCore:
+    """Core functionality tests for FastMCP server.
 
-    @pytest.mark.anyio
-    async def test_create_server(self):
-        """Test basic server instantiation."""
-        mcp = FastMCP(instructions="Server instructions")
-        assert mcp.name == "FastMCP"
-        assert mcp.instructions == "Server instructions"
+    Tests basic server operations, tool management, and error handling.
+    """
 
     @pytest.mark.anyio
-    async def test_basic_tool(self):
-        """Test basic tool registration and execution."""
+    async def test_server_lifecycle(self):
+        """Test complete server lifecycle including startup and shutdown."""
+        mcp = FastMCP(instructions="Test server")
+
+        async with client_session(mcp._mcp_server) as client:
+            # Test server is operational
+            assert client.is_connected()
+
+            # Test basic functionality
+            @mcp.tool()
+            async def echo(msg: str) -> str:
+                return msg
+
+            result = await client.call_tool("echo", {"msg": "test"})
+            assert result.content[0].text == "test"
+
+        # Verify cleanup after context exit
+        assert not mcp._mcp_server.is_running()
+
+    @pytest.mark.anyio
+    async def test_resource_management(self):
+        """Test resource lifecycle and cleanup."""
+        mcp = FastMCP()
+
+        # Define resource with proper typing
+        @mcp.resource("test://data")
+        async def test_resource() -> AsyncIterator[str]:
+            yield "test data"
+            # Cleanup happens automatically
+
+        async with client_session(mcp._mcp_server) as client:
+            result = await client.read_resource("test://data")
+            assert result.contents[0].text == "test data"
+
+    @pytest.mark.anyio
+    async def test_error_handling_comprehensive(self):
+        """Test various error scenarios and proper error propagation."""
         mcp = FastMCP()
 
         @mcp.tool()
-        def add(x: int, y: int) -> int:
-            return x + y
+        async def error_tool(error_type: str) -> None:
+            if error_type == "value":
+                raise ValueError("Invalid value")
+            elif error_type == "key":
+                raise KeyError("Missing key")
+            raise RuntimeError("Unknown error")
 
         async with client_session(mcp._mcp_server) as client:
-            result = await client.call_tool("add", {"x": 1, "y": 2})
-            assert result.content[0].text == "3"
+            # Test multiple error types
+            for error_type, expected_error in [
+                ("value", "Invalid value"),
+                ("key", "Missing key"),
+                ("unknown", "Unknown error")
+            ]:
+                result = await client.call_tool(
+                    "error_tool",
+                    {"error_type": error_type}
+                )
+                assert result.isError
+                assert expected_error in result.content[0].text
 
     @pytest.mark.anyio
-    async def test_basic_resource(self):
-        """Test basic resource functionality."""
-        mcp = FastMCP()
-
-        @mcp.resource("resource://test")
-        def get_text() -> str:
-            return "Hello, world!"
-
-        async with client_session(mcp._mcp_server) as client:
-            result = await client.read_resource("resource://test")
-            assert result.contents[0].text == "Hello, world!"
-
-    @pytest.mark.anyio
-    async def test_error_handling(self):
-        """Test basic error handling."""
-        mcp = FastMCP()
-
-        @mcp.tool()
-        def error_tool() -> None:
-            raise ValueError("Test error")
-
-        async with client_session(mcp._mcp_server) as client:
-            result = await client.call_tool("error_tool", {})
-            assert result.isError is True
-            assert "Test error" in result.content[0].text
-
-    @pytest.mark.anyio
-    async def test_context_injection(self):
-        """Test basic context functionality."""
+    async def test_context_with_logging(self):
+        """Test context functionality with logging verification."""
         mcp = FastMCP()
 
         @mcp.tool()
-        def context_tool(ctx: Context) -> str:
-            return f"Request {ctx.request_id}"
+        async def logging_tool(msg: str, ctx: Context) -> str:
+            await ctx.info(f"Processing: {msg}")
+            await ctx.debug("Debug info")
+            return f"Processed {msg}"
+
+        # Example of appropriate mock usage for side effects
+        with patch("mcp.server.session.ServerSession.send_log_message") as mock_log:
+            async with client_session(mcp._mcp_server) as client:
+                result = await client.call_tool(
+                    "logging_tool",
+                    {"msg": "test"}
+                )
+
+                # Verify tool result
+                assert result.content[0].text == "Processed test"
+
+                # Verify logging side effects
+                mock_log.assert_any_call(
+                    level="info",
+                    data="Processing: test",
+                    logger=None
+                )
+
+class TestContextFeatures:
+    """Comprehensive context feature testing."""
+
+    @pytest.mark.anyio
+    async def test_context_detection(self):
+        """Test proper context detection and injection."""
+        mcp = FastMCP()
+
+        @mcp.tool()
+        async def tool_with_context(x: int, ctx: Context) -> str:
+            assert ctx.request_id is not None
+            return f"Request {ctx.request_id}: {x}"
 
         async with client_session(mcp._mcp_server) as client:
-            result = await client.call_tool("context_tool", {})
+            result = await client.call_tool(
+                "tool_with_context",
+                {"x": 42}
+            )
             assert "Request" in result.content[0].text
+            assert "42" in result.content[0].text
+
+    @pytest.mark.anyio
+    async def test_context_logging_levels(self):
+        """Test all context logging levels."""
+        mcp = FastMCP()
+
+        @mcp.tool()
+        async def logging_tool(ctx: Context) -> str:
+            await ctx.debug("Debug message")
+            await ctx.info("Info message")
+            await ctx.warning("Warning message")
+            await ctx.error("Error message")
+            return "Logged all levels"
+
+        with patch("mcp.server.session.ServerSession.send_log_message") as mock_log:
+            async with client_session(mcp._mcp_server) as client:
+                await client.call_tool("logging_tool", {})
+
+                # Verify all log levels
+                mock_log.assert_any_call(level="debug", data="Debug message", logger=None)
+                mock_log.assert_any_call(level="info", data="Info message", logger=None)
+                mock_log.assert_any_call(level="warning", data="Warning message", logger=None)
+                mock_log.assert_any_call(level="error", data="Error message", logger=None)
+
+    @pytest.mark.anyio
+    async def test_session_lifecycle(self):
+        """Test complete client session lifecycle."""
+        mcp = FastMCP()
+
+        async with client_session(mcp._mcp_server) as client:
+            # Verify initial connection
+            assert client.is_connected()
+
+            # Test basic operation
+            @mcp.tool()
+            async def ping() -> str:
+                return "pong"
+
+            result = await client.call_tool("ping", {})
+            assert result.content[0].text == "pong"
+
+            # Test error handling
+            @mcp.tool()
+            async def error_tool() -> None:
+                raise ValueError("Test error")
+
+            error_result = await client.call_tool("error_tool", {})
+            assert error_result.isError
+            assert "Test error" in error_result.content[0].text
+
+            # Verify connection still valid after error
+            assert client.is_connected()
+
+        # Verify cleanup after context exit
+        assert not client.is_connected()
 ```
 </example>
 
 <example type="invalid">
 ```python
-# ❌ Bad practices to avoid
-
+# Bad practices to avoid
 class TestBadPractices:
-    def test_no_anyio(self):  # Missing anyio marker
+    def test_without_anyio(self):  # ❌ Missing anyio marker
         mcp = FastMCP()
         result = mcp.do_something()  # Not async
         assert result
 
     @pytest.mark.anyio
-    async def test_no_cleanup(self):
+    async def test_excessive_mocking(self):  # ❌ Over-mocking
+        with patch("mcp.server.FastMCP") as mock_mcp:  # Don't mock core functionality
+            mock_mcp.return_value.do_something.return_value = "result"
+            result = await mock_mcp.do_something()
+            assert result == "result"
+
+    @pytest.mark.anyio
+    async def test_poor_resource_management(self):  # ❌ Bad resource management
         mcp = FastMCP()
         client = await mcp._mcp_server.connect()  # No context manager
         result = await client.call_tool("tool", {})
-        # Missing client cleanup
-
-    def test_mixing_sync_async(self):
-        mcp = FastMCP()
-        result = await mcp.do_something()  # Mixing sync/async incorrectly
-        assert result
+        # Missing cleanup
 
     @pytest.mark.anyio
-    async def test_incomplete_error_check(self):
+    async def test_untyped_code(self):  # ❌ Missing type hints
+        mcp = FastMCP()
+
+        @mcp.tool()
+        def untyped_tool(x, y):  # Missing type hints
+            return x + y
+
+    @pytest.mark.anyio
+    async def test_incomplete_error_handling(self):  # ❌ Insufficient error testing
         mcp = FastMCP()
         try:
             result = await mcp.do_something()
         except:  # Too broad exception handling
             pass  # No assertions on error
+
+class TestBadContextPractices:
+    @pytest.mark.anyio
+    async def test_incomplete_context_testing(self):  # ❌ Missing comprehensive context testing
+        mcp = FastMCP()
+
+        @mcp.tool()
+        async def bad_tool(ctx: Context) -> str:
+            return "No context verification"  # Missing context attribute verification
+
+    @pytest.mark.anyio
+    async def test_poor_session_management(self):  # ❌ Poor session handling
+        mcp = FastMCP()
+        client = await mcp._mcp_server.connect()  # No context manager
+
+        try:
+            result = await client.call_tool("some_tool", {})
+        finally:
+            await client.disconnect()  # Manual cleanup instead of context manager
+
+    @pytest.mark.anyio
+    async def test_incomplete_logging_test(self):  # ❌ Incomplete logging verification
+        mcp = FastMCP()
+
+        @mcp.tool()
+        async def logging_tool(ctx: Context) -> str:
+            await ctx.info("Only testing info level")  # Missing other log levels
+            return "Done"
+
+        with patch("mcp.server.session.ServerSession.send_log_message") as mock_log:
+            async with client_session(mcp._mcp_server) as client:
+                await client.call_tool("logging_tool", {})
+                # Only verifying one log level
+                mock_log.assert_called_once()
 ```
 </example>
