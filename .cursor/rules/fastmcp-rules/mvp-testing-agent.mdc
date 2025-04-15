@@ -10,6 +10,23 @@ alwaysApply: false
 
 ## Critical Rules
 
+### Pre-Implementation Investigation
+- ALWAYS run `tree tests` to verify test folder structure before writing any test code
+- ALWAYS search for fixture references in conftest.py and related test files
+- ALWAYS use grep/search to find similar tests or patterns before writing new ones
+- ALWAYS use `<quotes>...</quotes>` tags when quoting relevant code from existing files
+- ALWAYS use `<thinking>...</thinking>` to document your reasoning process before writing any code
+- NEVER generate test code without first examining folder structure and fixture references
+
+### Code Reference Discovery
+- ALWAYS use `grep_search` or `codebase_search` to find related patterns before implementation
+- ALWAYS check for related fixtures with `grep_search -q "def \w+_fixture" tests/`
+- ALWAYS search for similar test implementations with `grep_search -q "def test_\w+" tests/`
+- ALWAYS examine conftest.py files in relevant test directories
+- ALWAYS review imports and dependencies in similar test files
+- NEVER assume fixture availability without explicit verification
+- NEVER implement tests without checking existing patterns first
+
 ### Reference Documentation
 - ALWAYS consult SCRATCH.md when unsure about testing patterns or implementation details
 - Key sections in SCRATCH.md for reference:
@@ -34,7 +51,10 @@ alwaysApply: false
 - ALWAYS organize tests by component functionality
 - ALWAYS use descriptive test names that indicate what is being tested
 - ALWAYS include docstrings in test classes and methods
+- ALWAYS respect existing folder structure and organization patterns
+- ALWAYS follow fixture naming conventions from existing code
 - NEVER mix different component tests in the same class
+- NEVER create new test patterns without checking existing ones
 
 ### Async Testing
 - ALWAYS use `@pytest.mark.anyio` for async tests
