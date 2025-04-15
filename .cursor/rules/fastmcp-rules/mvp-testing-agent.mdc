@@ -55,7 +55,8 @@ alwaysApply: false
 
 ### Mocking Philosophy
 - ALWAYS prefer real implementations over mocks when practical
-- ALWAYS limit mocking to external side effects (logging, file I/O)
+- ALWAYS limit mocking to external side effects (logging, file I/O, progress reports)
+- **NEVER mock `Context.info`, `Context.debug`, or `Context.report_progress` directly.** Use `mocker.patch("mcp.server.session.ServerSession.send_log_message")` or `mocker.patch("mcp.server.session.ServerSession.send_progress_update")` to verify log messages and progress updates instead.
 - ALWAYS use proper mock assertions when mocks are needed
 - NEVER mock core FastMCP functionality
 - NEVER use mocks just to simplify tests
@@ -231,7 +232,7 @@ class TestServerCore:
             await ctx.debug("Debug info")
             return f"Processed {msg}"
 
-        # Example of appropriate mock usage for side effects
+        # CORRECT: Mock the session's send_log_message method
         with patch("mcp.server.session.ServerSession.send_log_message") as mock_log:
             async with client_session(mcp._mcp_server) as client:
                 result = await client.call_tool(
@@ -242,10 +243,15 @@ class TestServerCore:
                 # Verify tool result
                 assert result.content[0].text == "Processed test"
 
-                # Verify logging side effects
+                # Verify logging side effects via the mocked session method
                 mock_log.assert_any_call(
                     level="info",
                     data="Processing: test",
+                    logger=None
+                )
+                mock_log.assert_any_call(
+                    level="debug",
+                    data="Debug info",
                     logger=None
                 )
 
@@ -399,5 +405,58 @@ class TestBadContextPractices:
                 await client.call_tool("logging_tool", {})
                 # Only verifying one log level
                 mock_log.assert_called_once()
+
+# Bad practices - DO NOT DO THIS
+import pytest
+from mcp.server.fastmcp import FastMCP, Context
+from mcp.shared.memory import create_connected_server_and_client_session as client_session
+from unittest.mock import patch, AsyncMock
+
+class TestServerCoreInvalid:
+    @pytest.mark.anyio
+    async def test_incorrect_context_mocking(self, mocker):
+        """Demonstrates incorrect mocking of Context methods."""
+        mcp = FastMCP()
+
+        @mcp.tool()
+        async def logging_tool_bad(msg: str, ctx: Context) -> str:
+            await ctx.info(f"Processing: {msg}")
+            await ctx.debug("Debug info")
+            return f"Processed {msg}"
+
+        # INCORRECT: Mocking Context methods directly
+        # This bypasses the actual logging mechanism via the session
+        mock_ctx_info = mocker.patch("mcp.server.fastmcp.Context.info", new_callable=AsyncMock)
+        mock_ctx_debug = mocker.patch("mcp.server.fastmcp.Context.debug", new_callable=AsyncMock)
+
+        async with client_session(mcp._mcp_server) as client:
+            result = await client.call_tool(
+                "logging_tool_bad",
+                {"msg": "test"}
+            )
+
+            # Assertions on these mocks are misleading as they don't reflect
+            # what the client would actually receive.
+            mock_ctx_info.assert_called_once_with(f"Processing: test")
+            mock_ctx_debug.assert_called_once_with("Debug info")
+
+    @pytest.mark.anyio
+    async def test_mixing_sync_async(self):
+        """Demonstrates mixing sync and async code incorrectly."""
+        # This test is invalid because it doesn't use @pytest.mark.anyio
+        # and attempts to use async features in a synchronous test function.
+        import asyncio
+        mcp = FastMCP()
+
+        @mcp.tool()
+        async def async_tool() -> str:
+            await asyncio.sleep(0.01)
+            return "done"
+
+        # Running async code directly in a sync test is problematic
+        # loop = asyncio.get_event_loop()
+        # loop.run_until_complete(async_tool())
+        # This test setup is fundamentally flawed for pytest-anyio
+        pass # Placeholder
 ```
 </example>
