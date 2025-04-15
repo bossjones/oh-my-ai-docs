@@ -4,11 +4,6 @@
 
 This version aims for clarity, good fixture usage, and comprehensive testing of the server's core MCP functionality (tools and resources)."""
 
-# NOTE: Following pytest fixture strategy, these fixtures have been reorganized:
-# 1. setup_test_environment, mock_openai_embeddings, mock_vectorstore moved to tests/test_avectorstore/conftest.py
-# 2. client_session moved to tests/conftest.py
-# 3. test_file_structure and mock_app_context remain in this file as they're test-specific
-
 # --- Core Imports ---
 from __future__ import annotations
 
@@ -36,7 +31,7 @@ from mcp.server.fastmcp import FastMCP, Context
 from mcp.server.fastmcp.exceptions import ResourceError
 from mcp.server.session import ServerSession
 from mcp.shared.exceptions import McpError
-from mcp.shared.memory import create_connected_server_and_client_session
+from mcp.shared.memory import create_connected_server_and_client_session as client_session
 from mcp.types import TextContent, Tool, Resource
 
 # --- Project Imports ---
@@ -163,9 +158,9 @@ class TestAVectorStoreMCPServer:
     @pytest.mark.vectorstore
     async def test_query_success(
         self,
-        client_session: ClientSession,
         mock_app_context: AppContext, # Ensures context is mocked
-        mocker: MockerFixture
+        mocker: MockerFixture,
+        mcp_server_instance: FastMCP
     ):
         """Test a successful query returning documents."""
         # Configure the mock retriever within the mocked AppContext's store
@@ -178,7 +173,8 @@ class TestAVectorStoreMCPServer:
         mock_invoke = mocker.patch("asyncio.to_thread", return_value=test_docs)
 
         query_text = "find relevant info"
-        result = await client_session.call_tool("query_docs", {"query": query_text})
+        async with client_session(mcp_server_instance._mcp_server) as client:
+            result = await client.call_tool("query_docs", {"query": query_text})
 
         assert result is not None
         assert not result.isError
@@ -202,10 +198,11 @@ class TestAVectorStoreMCPServer:
 
     @pytest.mark.anyio
     @pytest.mark.fastmcp_tools
-    async def test_query_empty_string(self, client_session: ClientSession):
+    async def test_query_empty_string(self, mcp_server_instance: FastMCP):
         """Test calling the query tool with an empty string."""
-        with pytest.raises(McpError) as exc_info:
-            await client_session.call_tool("query_docs", {"query": "  "}) # Whitespace only
+        async with client_session(mcp_server_instance._mcp_server) as client:
+            with pytest.raises(McpError) as exc_info:
+                await client.call_tool("query_docs", {"query": "  "}) # Whitespace only
 
         # FastMCP should catch the ValueError raised by the tool and convert it
         assert "Query cannot be empty" in str(exc_info.value)
@@ -217,9 +214,9 @@ class TestAVectorStoreMCPServer:
     @pytest.mark.vectorstore
     async def test_query_retriever_error(
         self,
-        client_session: ClientSession,
         mock_app_context: AppContext,
-        mocker: MockerFixture
+        mocker: MockerFixture,
+        mcp_server_instance: FastMCP
     ):
         """Test when the underlying retriever raises an exception."""
         mock_retriever = mock_app_context.store.as_retriever()
@@ -227,8 +224,9 @@ class TestAVectorStoreMCPServer:
         # Mock asyncio.to_thread to raise an exception
         mock_invoke = mocker.patch("asyncio.to_thread", side_effect=RuntimeError(error_message))
 
-        with pytest.raises(McpError) as exc_info:
-            await client_session.call_tool("query_docs", {"query": "trigger error"})
+        async with client_session(mcp_server_instance._mcp_server) as client:
+            with pytest.raises(McpError) as exc_info:
+                await client.call_tool("query_docs", {"query": "trigger error"})
 
         # The server should catch the underlying error and wrap it
         assert "Failed to query vectorstore" in str(exc_info.value)
@@ -240,9 +238,9 @@ class TestAVectorStoreMCPServer:
     @pytest.mark.vectorstore
     async def test_query_timeout(
         self,
-        client_session: ClientSession,
         mock_app_context: AppContext,
-        mocker: MockerFixture
+        mocker: MockerFixture,
+        mcp_server_instance: FastMCP
     ):
         """Test when the query operation times out."""
         mock_retriever = mock_app_context.store.as_retriever()
@@ -253,8 +251,9 @@ class TestAVectorStoreMCPServer:
         # so this test assumes the underlying call might timeout or FastMCP handles it.
         # If the server *did* have `async with timeout(...)`, this mock would trigger it.
         # Let's assume the server catches the TimeoutError from the mocked call.
-        with pytest.raises(McpError) as exc_info:
-            await client_session.call_tool("query_docs", {"query": "timeout query"})
+        async with client_session(mcp_server_instance._mcp_server) as client:
+            with pytest.raises(McpError) as exc_info:
+                await client.call_tool("query_docs", {"query": "timeout query"})
 
         # Check if the server translates TimeoutError appropriately
         assert "Query operation timed out" in str(exc_info.value) # Based on server's catch block
@@ -266,10 +265,10 @@ class TestAVectorStoreMCPServer:
     @pytest.mark.fastmcp_resources
     async def test_resource_success(
         self,
-        client_session: ClientSession,
         test_file_structure: dict[str, Path], # Provides paths and patches BASE/DOCS_PATH
         mocker: MockerFixture,
-        mock_app_context: AppContext # Needed to mock context access
+        mock_app_context: AppContext, # Needed to mock context access
+        mcp_server_instance: FastMCP
     ):
         """Test successfully reading the full documentation resource."""
         expected_content = f"Full documentation content for {TEST_MODULE}."
@@ -284,7 +283,8 @@ class TestAVectorStoreMCPServer:
         mocker.patch("aiofiles.os.path.exists", return_value=True) # Assume file exists
 
         resource_uri = f"docs://{TEST_MODULE}/full"
-        result = await client_session.read_resource(resource_uri)
+        async with client_session(mcp_server_instance._mcp_server) as client:
+            result = await client.read_resource(resource_uri)
 
         assert result is not None
         assert len(result.contents) == 1
@@ -301,16 +301,17 @@ class TestAVectorStoreMCPServer:
     @pytest.mark.fastmcp_resources
     async def test_resource_module_mismatch(
         self,
-        client_session: ClientSession,
         test_file_structure: dict[str, Path],
-        mock_app_context: AppContext
+        mock_app_context: AppContext,
+        mcp_server_instance: FastMCP
     ):
         """Test reading resource with a module name different from the server's."""
         wrong_module = "other_module"
         resource_uri = f"docs://{wrong_module}/full"
 
-        with pytest.raises(McpError) as exc_info:
-            await client_session.read_resource(resource_uri)
+        async with client_session(mcp_server_instance._mcp_server) as client:
+            with pytest.raises(McpError) as exc_info:
+                await client.read_resource(resource_uri)
 
         # Server should raise ResourceError, FastMCP converts it
         assert f"Requested module '{wrong_module}' does not match server module '{TEST_MODULE}'" in str(exc_info.value)
@@ -320,18 +321,19 @@ class TestAVectorStoreMCPServer:
     @pytest.mark.fastmcp_resources
     async def test_resource_file_not_found(
         self,
-        client_session: ClientSession,
         test_file_structure: dict[str, Path],
         mocker: MockerFixture,
-        mock_app_context: AppContext
+        mock_app_context: AppContext,
+        mcp_server_instance: FastMCP
     ):
         """Test reading resource when the underlying documentation file is missing."""
         # Mock aiofiles.os.path.exists to return False
         mock_exists = mocker.patch("aiofiles.os.path.exists", return_value=False)
 
         resource_uri = f"docs://{TEST_MODULE}/full"
-        with pytest.raises(McpError) as exc_info:
-            await client_session.read_resource(resource_uri)
+        async with client_session(mcp_server_instance._mcp_server) as client:
+            with pytest.raises(McpError) as exc_info:
+                await client.read_resource(resource_uri)
 
         assert "Documentation file not found" in str(exc_info.value)
         # assert exc_info.value.code == "RESOURCE_UNAVAILABLE" # Or similar
@@ -344,10 +346,10 @@ class TestAVectorStoreMCPServer:
     @pytest.mark.fastmcp_resources
     async def test_resource_read_error(
         self,
-        client_session: ClientSession,
         test_file_structure: dict[str, Path],
         mocker: MockerFixture,
-        mock_app_context: AppContext
+        mock_app_context: AppContext,
+        mcp_server_instance: FastMCP
     ):
         """Test reading resource when aiofiles raises an error during read."""
         error_message = "Disk read permission denied"
@@ -357,8 +359,9 @@ class TestAVectorStoreMCPServer:
         mocker.patch("aiofiles.os.path.exists", return_value=True)
 
         resource_uri = f"docs://{TEST_MODULE}/full"
-        with pytest.raises(McpError) as exc_info:
-            await client_session.read_resource(resource_uri)
+        async with client_session(mcp_server_instance._mcp_server) as client:
+            with pytest.raises(McpError) as exc_info:
+                await client.read_resource(resource_uri)
 
         assert "Error reading documentation file" in str(exc_info.value)
         assert error_message in str(exc_info.value) # Include original error
@@ -372,9 +375,9 @@ class TestAVectorStoreMCPServer:
     @pytest.mark.vectorstore
     async def test_lifespan_context_available_in_tool(
         self,
-        client_session: ClientSession,
         mock_app_context: AppContext, # Fixture sets up the mock context
-        mocker: MockerFixture
+        mocker: MockerFixture,
+        mcp_server_instance: FastMCP
     ):
         """Verify that the AppContext from the lifespan is accessible within the tool."""
         # We already mocked get_context in the mock_app_context fixture.
@@ -387,37 +390,8 @@ class TestAVectorStoreMCPServer:
         mocker.patch("asyncio.to_thread", return_value=[Document(page_content="Doc")])
 
         # Call the tool
-        await client_session.call_tool("query_docs", {"query": "check context"})
+        async with client_session(mcp_server_instance._mcp_server) as client:
+            await client.call_tool("query_docs", {"query": "check context"})
 
         # Assert that the store's method (accessed via context) was called
         store_spy.assert_called_once()
-
-    # Add more tests for edge cases, different configurations (k, min_relevance_score),
-    # and potentially the utility functions if needed.
-
-
-# Explanation and Key Changes:
-
-# setup_test_environment Fixture: Uses monkeypatch (scope="session") to patch sys.argv before the server module is potentially imported by other fixtures or the tests themselves. This ensures argparse in the server module picks up the TEST_MODULE. It also reloads the module to apply the patch.
-
-# mcp_server_instance Fixture: Now simply imports the server instance after the environment is set up.
-
-# mock_vectorstore Fixture: Mocks SKLearnVectorStore and crucially mocks the vectorstore_factory function from the server module to ensure the mocked store is used instead of trying to create a real one.
-
-# mock_app_context Fixture: Creates a mock AppContext and patches the server's get_context() method chain to return this mock context. This is vital for testing tool/resource functions that access ctx.request_context.lifespan_context.
-
-# test_file_structure Fixture: Creates the necessary directory layout in tmp_path and patches BASE_PATH and DOCS_PATH in the server module using monkeypatch. It returns the paths for potential use in tests.
-
-# client_session Fixture: Uses the standard create_connected_server_and_client_session helper for interaction testing.
-
-# Mocking aiofiles: Mocks for aiofiles.open and aiofiles.os.path.exists are placed within the specific tests that need them (test_resource_success, test_resource_file_not_found, etc.) using mocker.patch. This keeps the mocks scoped correctly. Note the use of mocker.MagicMock(__aenter__=..., __aexit__=...) for mocking async context managers.
-
-# Mocking asyncio.to_thread: Tee query_tool uses asyncio.to_thread(retriever.invoke, query). Tests mock this asyncio.to_thread call directly to control the return value or simulate errors/timeouts from the retriever invocation.
-
-# Error Assertions: Tests check for McpError and assert on the message content, as the specific error code might depend on FastMCP's internal error mapping.
-
-# Clarity: Renamed some fixtures and variables for better readability. Added comments explaining the purpose of mocks and fixtures.
-
-# Structure: Uses a test class TestAVectorStoreMCPServer to group related tests.
-
-# This test_server.py provides a solid foundation for testing the avectorstore_mcp.py server, covering its core functionalities and potential failure points using appropriate mocking and pytest features.
