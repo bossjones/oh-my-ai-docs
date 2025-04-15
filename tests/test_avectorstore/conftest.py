@@ -74,7 +74,7 @@ def setup_test_environment() -> None:
     # If we want to restore, we'd need to use a finalizer
 
 @pytest.fixture(scope="function")
-def test_file_structure(tmp_path: Path, monkeypatch: MonkeyPatch) -> dict[str, Path]:
+def test_file_structure(tmp_path: Path, monkeypatch: MonkeyPatch) -> dict[str, Path | str]:
     """Creates a temporary file structure for testing resources and patches paths.
 
     Scope: function - ensures test isolation
@@ -142,6 +142,7 @@ def test_file_structure(tmp_path: Path, monkeypatch: MonkeyPatch) -> dict[str, P
         "docs_file": docs_file,
         "llms_file": llms_file,
         "vectorstore_file": vectorstore_file,
+        "module_name": TEST_MODULE,
     }
 
 # --- Server Fixtures ---

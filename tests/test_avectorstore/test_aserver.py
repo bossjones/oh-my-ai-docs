@@ -111,7 +111,13 @@ class TestAVectorStoreMCPServer:
         mcp_server_instance: FastMCP,
         mocker: MockerFixture
     ):
-        """Test a successful query returning documents."""
+        """Test a successful query returning documents from the vectorstore.
+
+        Verifies:
+        - Correct integration between FastMCP server and SKLearnVectorStore
+        - Proper document retrieval and formatting in response
+        - Appropriate logging and progress reporting
+        """
         # Only mock logging/progress reporting as per rules
         mock_log = mocker.patch("mcp.server.session.ServerSession.send_log_message")
         mock_progress = mocker.patch("mcp.server.session.ServerSession.send_progress_update")

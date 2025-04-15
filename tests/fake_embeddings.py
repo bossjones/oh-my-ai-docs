@@ -1,7 +1,6 @@
 """Fake Embedding class for testing purposes."""
 
 import math
-from typing import List
 
 from langchain_core.embeddings import Embeddings
 
@@ -40,7 +39,7 @@ class ConsistentFakeEmbeddings(FakeEmbeddings):
 
     def embed_documents(self, texts: list[str]) -> list[list[float]]:
         """Return consistent embeddings for each text seen so far."""
-        out_vectors = []
+        out_vectors: list[list[float]] = []
         for text in texts:
             if text not in self.known_texts:
                 self.known_texts.append(text)
