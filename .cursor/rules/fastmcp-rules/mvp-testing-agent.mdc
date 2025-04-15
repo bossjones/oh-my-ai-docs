@@ -20,6 +20,19 @@ alwaysApply: false
   ```
   uv run pytest -s --verbose --showlocals --tb=short <test_path>::<TestClass>::<test_method>
   ```
+- ALWAYS check examples based on pytest.marks decorators on the test in docs/developer/fastmcp/*.md. For example given:
+  ```
+  # given
+    @pytest.mark.anyio
+    @pytest.mark.fastmcp_basic
+    async def test_server_initialization(self, mcp_server_instance: FastMCP):
+        """Verify the server name is correctly set based on args."""
+        assert mcp_server_instance.name == f"{TEST_MODULE}-docs-mcp-server"
+
+  # then:
+
+  # read docs/developer/fastmcp/fastmcp_test_example_basic.md for
+  ```
 - ALWAYS analyze test failures one by one, starting with the first failure
 - ALWAYS use `<quotes>...</quotes>` tags when quoting relevant code from existing files
 - ALWAYS use `<thinking>...</thinking>` to document your reasoning process before writing any code

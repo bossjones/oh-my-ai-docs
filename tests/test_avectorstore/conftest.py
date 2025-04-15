@@ -28,17 +28,18 @@ class VectorStoreRetrieverProtocol(Protocol):
     @property
     def vectorstore(self) -> Any: ...
 
-from mcp.server.fastmcp import FastMCP
+from mcp.server.fastmcp import FastMCP, Context
 from contextlib import asynccontextmanager
 
 from tests.fake_embeddings import FakeEmbeddings
 
 # Import vectorstore_session with proper module reference validation
 try:
-    from oh_my_ai_docs.avectorstore_mcp import vectorstore_session as real_vectorstore_session
+    from oh_my_ai_docs.avectorstore_mcp import vectorstore_session as real_vectorstore_session, AppContext
 except ImportError:
     # Mock for linter - in actual running this would be properly imported
     real_vectorstore_session = None
+    # AppContext = Any # type: ignore
 
 # --- Constants ---
 TEST_MODULE = "dpytest"  # Default module for testing
@@ -267,3 +268,15 @@ def mock_vectorstore_session_logging(monkeypatch: pytest.MonkeyPatch) -> None:
 
     # Apply the patch
     monkeypatch.setattr("oh_my_ai_docs.avectorstore_mcp.vectorstore_session", wrapped_session)
+
+@pytest.fixture(scope="function")
+def mock_app_context(mocker: MockerFixture, mock_vectorstore: SKLearnVectorStore) -> AppContext:
+    """Provides a mocked AppContext instance.
+
+    Scope: function - ensures test isolation
+    Args:
+        mocker: pytest-mock's mocker fixture
+        mock_vectorstore: The mocked vectorstore fixture
+    Returns: AppContext instance with mocked store
+    """
+    return AppContext(store=mock_vectorstore)

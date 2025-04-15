@@ -54,20 +54,6 @@ TEST_MODULE = "dpytest" # Default module for testing
 # --- Fixtures ---
 
 @pytest.fixture(scope="function")
-def mock_app_context(mocker: MockerFixture, mock_vectorstore: SKLearnVectorStore) -> AppContext:
-    """Provides a mocked AppContext, simulating the lifespan context."""
-    app_ctx = AppContext(store=mock_vectorstore)
-    # Mock the get_context().request_context.lifespan_context chain
-    # This is tricky, we need to mock how the server retrieves the context
-    mock_req_ctx = mocker.MagicMock()
-    mock_req_ctx.lifespan_context = app_ctx
-    mock_server_ctx = mocker.MagicMock(spec=Context)
-    mock_server_ctx.request_context = mock_req_ctx
-    # Patch the server's get_context method
-    mocker.patch("oh_my_ai_docs.avectorstore_mcp.mcp_server.get_context", return_value=mock_server_ctx)
-    return app_ctx
-
-@pytest.fixture(scope="function")
 def test_file_structure(tmp_path: Path, monkeypatch: MonkeyPatch) -> dict[str, Path]:
     """Creates a temporary file structure for testing resources and patches paths."""
     base_dir = tmp_path / "test_repo"
@@ -159,43 +145,47 @@ class TestAVectorStoreMCPServer:
     @pytest.mark.vectorstore
     async def test_query_success(
         self,
-        mock_app_context: AppContext, # Ensures context is mocked
+        mock_app_context: AppContext,
         mocker: MockerFixture,
         mcp_server_instance: FastMCP
     ):
         """Test a successful query returning documents."""
-        # Configure the mock retriever within the mocked AppContext's store
-        mock_retriever = mock_app_context.store.as_retriever()
+        # Set up test documents
         test_docs = [
             Document(page_content="Relevant doc 1", metadata={"score": 0.9}),
             Document(page_content="Relevant doc 2", metadata={"score": 0.8}),
         ]
-        # Mock the actual call used by the tool (asyncio.to_thread(retriever.invoke, ...))
-        mock_invoke = mocker.patch("asyncio.to_thread", return_value=test_docs)
+
+        # Create a mock retriever that will be returned by as_retriever
+        mock_retriever = mocker.MagicMock()
+        mock_retriever.invoke = mocker.AsyncMock(return_value=test_docs)
+
+        # Configure the store's as_retriever to return our mock_retriever
+        mock_app_context.store.as_retriever.return_value = mock_retriever
+
+        # Patch the server's get_context to return our mock context
+        mocker.patch("oh_my_ai_docs.avectorstore_mcp.mcp_server.get_context", return_value=mock_app_context)
 
         query_text = "find relevant info"
         async with client_session(mcp_server_instance._mcp_server) as client:
             result = await client.call_tool("query_docs", {"query": query_text})
 
+        # Verify the result
         assert result is not None
         assert not result.isError
         assert len(result.content) == 1
         assert isinstance(result.content[0], TextContent)
 
-        # The tool returns a DocumentResponse model, which FastMCP likely serializes to JSON string
+        # Verify the response data
         response_data = json.loads(result.content[0].text)
         assert isinstance(response_data, dict)
         assert response_data["documents"] == ["Relevant doc 1", "Relevant doc 2"]
         assert response_data["scores"] == [0.9, 0.8]
         assert response_data["total_found"] == 2
 
-        # Verify retriever interaction - use a different approach to check if as_retriever was called
-        # We can't use .assert_any_call() since it's not a mock method
-        # Just verify that mock_invoke was called correctly
-        mock_invoke.assert_called_once()
-        call_args, call_kwargs = mock_invoke.call_args
-        assert call_args[0] == mock_retriever.invoke # Check the function being called
-        assert call_args[1] == query_text # Check the query argument
+        # Verify the retriever was called correctly
+        mock_retriever.invoke.assert_called_once_with(query_text)
+        mock_app_context.store.as_retriever.assert_called_once()
 
     @pytest.mark.anyio
     @pytest.mark.fastmcp_tools
