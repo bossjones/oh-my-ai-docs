@@ -7,6 +7,7 @@ alwaysApply: false
 # FastMCP MVP Testing Patterns
 
 @python-tdd-auto.mdc should be used with this rule as well.
+@pytest-fixtures-agent.mdc should be used to make sure all fixtures are defined in a conftest.py and naming.
 
 ## Critical Rules
 

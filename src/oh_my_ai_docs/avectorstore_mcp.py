@@ -10,6 +10,23 @@
 # pyright: reportUnusedVariable=false
 # pyright: reportConstantRedefinition=false
 
+"""
+avectorstore_mcp.py - Documentation Vector Store MCP Server
+
+This module implements a FastMCP server that provides semantic search capabilities over documentation using vector stores.
+It supports querying documentation for different modules (discord, dpytest, langgraph) through a vector store interface,
+allowing for semantic similarity search and document retrieval.
+
+Key features:
+- Vector store-based semantic search over documentation
+- Support for multiple documentation modules
+- Configurable search parameters (k, relevance scores)
+- Full documentation retrieval endpoints
+- Async operation with proper resource management
+
+Based on the vectorstore_session implementation from langchain-community/fastmcp project.
+"""
+
 from __future__ import annotations
 
 import argparse
