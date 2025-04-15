@@ -142,6 +142,32 @@ alwaysApply: false
 - NEVER skip verification layers
 - NEVER combine layer verifications without proper isolation
 
+### Test Failure Debugging
+- ALWAYS use precise test selection when debugging failures
+- ALWAYS generate isolated test commands for each failing test
+- ALWAYS use the following command format for debugging individual failing tests:
+  ```
+  uv run pytest -s --verbose --showlocals --tb=short <test_path>::<TestClass>::<test_method>
+  ```
+- ALWAYS analyze test failures one by one, starting with the first failure
+- ALWAYS use `--showlocals` to inspect the state when failures occur
+- ALWAYS use `--tb=short` for cleaner traceback output
+- ALWAYS transform pytest failure reports into individual debugging commands, for example:
+  ```
+  # Transform failure report:
+  - tests/test_avectorstore/test_aserver.py:345 TestAVectorStoreMCPServer.test_resource_read_error
+
+  # Into debugging command:
+  uv run pytest -s --verbose --showlocals --tb=short tests/test_avectorstore/test_aserver.py::TestAVectorStoreMCPServer::test_resource_read_error
+  ```
+- NEVER run the entire test suite when debugging specific failures
+- NEVER debug multiple test failures simultaneously
+- NEVER skip the detailed inspection of test failure output
+- ALWAYS use filter flags when needed (e.g., `-k` for keyword filtering)
+- ALWAYS consider fixture issues when tests fail unexpectedly
+- ALWAYS check for shared state problems between tests when multiple failures occur
+- ALWAYS validate mock configuration when mock-related assertions fail
+
 ## Examples
 
 <example>
@@ -330,6 +356,22 @@ class TestContextFeatures:
 
         # Verify cleanup after context exit
         assert not client.is_connected()
+
+    # Example of debugging test failures
+    @pytest.mark.anyio
+    async def test_failure_debugging_example(self):
+        """Example showing how to debug failures."""
+        # When failures occur, run tests individually with:
+        # uv run pytest -s --verbose --showlocals --tb=short tests/path/test_file.py::TestClass::test_method
+
+        # For example, if the following test fails:
+        # tests/test_avectorstore/test_aserver.py:345 TestAVectorStoreMCPServer.test_resource_read_error
+
+        # Run it with:
+        # uv run pytest -s --verbose --showlocals --tb=short tests/test_avectorstore/test_aserver.py::TestAVectorStoreMCPServer::test_resource_read_error
+
+        # This allows focused debugging of one failure at a time
+        pass
 ```
 </example>
 
@@ -458,5 +500,20 @@ class TestServerCoreInvalid:
         # loop.run_until_complete(async_tool())
         # This test setup is fundamentally flawed for pytest-anyio
         pass # Placeholder
+
+    # INCORRECT: Bad approach to test failure debugging
+    def test_poor_failure_debugging(self):
+        """Demonstrates poor approach to debugging test failures."""
+        # ❌ Running the entire test suite when you have specific failures
+        # pytest tests/
+
+        # ❌ Running multiple failing tests together without focused debugging
+        # pytest tests/test_avectorstore/test_aserver.py
+
+        # ❌ Not using proper diagnostic flags
+        # pytest tests/test_avectorstore/test_aserver.py::TestAVectorStoreMCPServer::test_resource_read_error
+
+        # ❌ Not examining local variables at point of failure
+        # pytest --tb=native tests/test_avectorstore/test_aserver.py::TestAVectorStoreMCPServer::test_resource_read_error
 ```
 </example>
