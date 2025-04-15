@@ -380,12 +380,10 @@ async def query_tool(query: str) -> DocumentResponse:
     await ctx.debug(f"state: {state}")
 
     try:
-        # async with timeout(30):  # Prevent hanging on API calls
-        #     async with vectorstore_session(str(vectorstore_path)) as app_ctx:
         await ctx.info(f"Querying vectorstore with k={config.k}")
 
-        # import bpdb; bpdb.set_trace()
-        retriever: VectorStoreRetriever = state.as_retriever(search_kwargs={"k": config.k})
+        # Get the retriever from the store, not from state directly
+        retriever: VectorStoreRetriever = state.store.as_retriever(search_kwargs={"k": config.k})
 
         relevant_docs: list[Document] = await asyncio.to_thread(retriever.invoke, query)
 

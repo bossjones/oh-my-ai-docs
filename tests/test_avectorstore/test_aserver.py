@@ -36,58 +36,19 @@ from mcp.shared.memory import create_connected_server_and_client_session as clie
 from mcp.types import TextContent
 
 # --- Project Imports ---
-# Assume the server code is accessible, adjust path if needed
 import oh_my_ai_docs.avectorstore_mcp
 from oh_my_ai_docs.avectorstore_mcp import (
     AppContext,
     DocumentResponse,
     QueryConfig,
     ToolError,
-    vectorstore_factory, # Use the factory
+    vectorstore_factory,
     get_vectorstore_path,
 )
-from tests.fake_embeddings import FakeEmbeddings # Use the fake embeddings for testing
+from tests.fake_embeddings import FakeEmbeddings
 
 # --- Constants ---
-TEST_MODULE = "dpytest" # Default module for testing
-
-# --- Fixtures ---
-
-@pytest.fixture(scope="function")
-def test_file_structure(tmp_path: Path, monkeypatch: MonkeyPatch) -> dict[str, Path]:
-    """Creates a temporary file structure for testing resources and patches paths."""
-    base_dir = tmp_path / "test_repo"
-    docs_root = base_dir / "docs" / "ai_docs"
-    module_docs_path = docs_root / TEST_MODULE
-    vectorstore_path = module_docs_path / "vectorstore"
-
-    # Create directories
-    vectorstore_path.mkdir(parents=True, exist_ok=True)
-
-    # Create dummy docs file
-    docs_file = module_docs_path / f"{TEST_MODULE}_docs.txt"
-    docs_file.write_text(f"Full documentation content for {TEST_MODULE}.")
-
-    # Create dummy vectorstore file (though it won't be loaded by mock)
-    vectorstore_file = vectorstore_path / f"{TEST_MODULE}_vectorstore.parquet"
-    vectorstore_file.touch()
-
-    # Patch the paths used in the server code
-    monkeypatch.setattr("oh_my_ai_docs.avectorstore_mcp.BASE_PATH", base_dir)
-    monkeypatch.setattr("oh_my_ai_docs.avectorstore_mcp.DOCS_PATH", docs_root)
-
-    # Mock aiofiles operations
-    # We need to mock aiofiles globally for the test function's scope
-    # This is better done within the test or using a dedicated fixture if complex
-
-    return {
-        "base": base_dir,
-        "docs_root": docs_root,
-        "module_docs": module_docs_path,
-        "vectorstore": vectorstore_path,
-        "docs_file": docs_file,
-        "vectorstore_file": vectorstore_file,
-    }
+TEST_MODULE = "dpytest"
 
 # --- Test Class ---
 
@@ -145,29 +106,20 @@ class TestAVectorStoreMCPServer:
     @pytest.mark.vectorstore
     async def test_query_success(
         self,
-        mock_app_context: AppContext,
-        mocker: MockerFixture,
-        mcp_server_instance: FastMCP
+        fastmcp_vector_store: SKLearnVectorStore,
+        sample_texts: list[str],
+        mcp_server_instance: FastMCP,
+        mocker: MockerFixture
     ):
         """Test a successful query returning documents."""
-        # Set up test documents
-        test_docs = [
-            Document(page_content="Relevant doc 1", metadata={"score": 0.9}),
-            Document(page_content="Relevant doc 2", metadata={"score": 0.8}),
-        ]
+        # Only mock logging/progress reporting as per rules
+        mock_log = mocker.patch("mcp.server.session.ServerSession.send_log_message")
+        mock_progress = mocker.patch("mcp.server.session.ServerSession.send_progress_update")
 
-        # Get the mock retriever INSTANCE returned by the mocked as_retriever method
-        mock_retriever = mock_app_context.store.as_retriever()
-        # Configure the invoke method ON the mock retriever instance
-        mock_retriever.invoke = mocker.AsyncMock(return_value=test_docs)
+        # Set up the embeddings provider for the test
+        oh_my_ai_docs.avectorstore_mcp.set_embeddings_provider(FakeEmbeddings(size=128))
 
-        # Patch the server's get_context to return our mock context
-        # NOTE: This might be redundant if the tool correctly uses the lifespan context.
-        # Consider if this patch is still necessary with the new AppContext setup.
-        # For now, keeping it to ensure the tool gets the context if it doesn't use lifespan.
-        mocker.patch("oh_my_ai_docs.avectorstore_mcp.mcp_server.get_context", return_value=mock_app_context)
-
-        query_text = "find relevant info"
+        query_text = "protocol LLM"  # Should match first sample text
         async with client_session(mcp_server_instance._mcp_server) as client:
             result = await client.call_tool("query_docs", {"query": query_text})
 
@@ -177,17 +129,28 @@ class TestAVectorStoreMCPServer:
         assert len(result.content) == 1
         assert isinstance(result.content[0], TextContent)
 
-        # Verify the response data
+        # Parse the response
         response_data = json.loads(result.content[0].text)
         assert isinstance(response_data, dict)
-        assert response_data["documents"] == ["Relevant doc 1", "Relevant doc 2"]
-        assert response_data["scores"] == [0.9, 0.8]
-        assert response_data["total_found"] == 2
+        assert len(response_data["documents"]) > 0
+        # First result should be the most relevant text about FastMCP and LLM
+        assert "FastMCP" in response_data["documents"][0]
+        assert "LLM" in response_data["documents"][0]
 
-        # Verify the as_retriever METHOD was called ONCE on the store instance
-        mock_app_context.store.as_retriever.assert_called_once()
-        # Verify the invoke method was called ONCE on the mock RETRIEVER instance
-        mock_retriever.invoke.assert_called_once_with(query_text)
+        # Verify logging was called appropriately
+        mock_log.assert_any_call(
+            level="info",
+            data="Querying vectorstore with k=3",  # Default k value
+            logger=None
+        )
+        mock_log.assert_any_call(
+            level="info",
+            data=mocker.ANY,  # Number of docs may vary
+            logger=None
+        )
+
+        # Verify progress was reported
+        mock_progress.assert_called()
 
     @pytest.mark.anyio
     @pytest.mark.fastmcp_tools

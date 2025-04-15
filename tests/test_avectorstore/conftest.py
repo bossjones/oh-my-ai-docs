@@ -73,6 +73,77 @@ def setup_test_environment() -> None:
     # No need to yield/restore since this is session-scoped
     # If we want to restore, we'd need to use a finalizer
 
+@pytest.fixture(scope="function")
+def test_file_structure(tmp_path: Path, monkeypatch: MonkeyPatch) -> dict[str, Path]:
+    """Creates a temporary file structure for testing resources and patches paths.
+
+    Scope: function - ensures test isolation
+    Args:
+        tmp_path: pytest's temporary path fixture
+        monkeypatch: pytest's monkeypatch fixture
+    Returns: Dictionary containing paths to test directories and files
+
+    Creates a standardized file structure for vectorstore testing that mirrors
+    the actual dpytest documentation structure from tests/fixtures/dpytest:
+    - base_dir/
+      - docs/
+        - ai_docs/
+          - dpytest/
+            - vectorstore/
+              - dpytest_vectorstore.parquet
+            - dpytest_docs.txt (contains real dpytest docs)
+            - llms.txt (contains real URL mappings)
+            - summaries/
+              - dpytest.readthedocs.io_*.txt (real doc summaries)
+    """
+    # Set up base paths
+    base_dir = tmp_path / "test_repo"
+    docs_root = base_dir / "docs" / "ai_docs"
+    module_docs_path = docs_root / TEST_MODULE
+    vectorstore_path = module_docs_path / "vectorstore"
+    summaries_path = module_docs_path / "summaries"
+
+    # Create all required directories
+    for path in [vectorstore_path, summaries_path]:
+        path.mkdir(parents=True, exist_ok=True)
+
+    # Copy real dpytest documentation content
+    fixtures_path = Path("tests/fixtures/dpytest")
+
+    # Copy main docs file
+    docs_file = module_docs_path / f"{TEST_MODULE}_docs.txt"
+    docs_file.write_text(fixtures_path.joinpath("dpytest_docs.txt").read_text())
+
+    # Copy llms.txt
+    llms_file = module_docs_path / "llms.txt"
+    llms_file.write_text(fixtures_path.joinpath("llms.txt").read_text())
+
+    # Copy all summary files
+    fixtures_summaries = fixtures_path / "summaries"
+    if fixtures_summaries.exists():
+        for summary_file in fixtures_summaries.glob("*.txt"):
+            dest_file = summaries_path / summary_file.name
+            dest_file.write_text(summary_file.read_text())
+
+    # Create dummy vectorstore file (though it won't be loaded by mock)
+    vectorstore_file = vectorstore_path / f"{TEST_MODULE}_vectorstore.parquet"
+    vectorstore_file.touch()
+
+    # Patch the paths used in the server code
+    monkeypatch.setattr("oh_my_ai_docs.avectorstore_mcp.BASE_PATH", base_dir)
+    monkeypatch.setattr("oh_my_ai_docs.avectorstore_mcp.DOCS_PATH", docs_root)
+
+    return {
+        "base": base_dir,
+        "docs_root": docs_root,
+        "module_docs": module_docs_path,
+        "vectorstore": vectorstore_path,
+        "summaries": summaries_path,
+        "docs_file": docs_file,
+        "llms_file": llms_file,
+        "vectorstore_file": vectorstore_file,
+    }
+
 # --- Server Fixtures ---
 
 @pytest.fixture(scope="function")
