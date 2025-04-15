@@ -43,8 +43,8 @@ from mcp.types import (
 )
 from pydantic import BaseModel, Field, field_validator
 
-# Configure logging - UNCOMMENTED this line
-# logger = get_logger(__name__)
+# Configure logging
+logger = get_logger(__name__)
 
 T = TypeVar("T")
 
@@ -393,19 +393,19 @@ async def get_all_docs(module: str) -> str:
         await ctx.info(f"Retrieving documentation for module: {module}")
 
         if module != args.module:
-            await ctx.error("Module mismatch", extra={"requested_module": module, "server_module": args.module})
+            await ctx.error(f"Module mismatch: requested module '{module}', server module '{args.module}'")
             raise ResourceError(f"Requested module '{module}' does not match server module '{args.module}'")
 
         # Local path to the documentation
         doc_path = DOCS_PATH / module / f"{module}_docs.txt"
 
         if not doc_path.exists():
-            await ctx.error("Documentation file not found", extra={"doc_module": module, "path": str(doc_path)})
+            await ctx.error(f"Documentation file not found: module '{module}', path '{doc_path}'")
             raise ResourceError(f"Documentation file not found for module: {module}")
 
         async with aiofiles.open(doc_path) as file:
             content = await file.read()
-            await ctx.info("Successfully read documentation", extra={"doc_module": module, "size": len(content)})
+            await ctx.info(f"Successfully read documentation: module '{module}', size {len(content)}")
             return content
 
     except ResourceError:
