@@ -156,14 +156,15 @@ class TestAVectorStoreMCPServer:
             Document(page_content="Relevant doc 2", metadata={"score": 0.8}),
         ]
 
-        # Create a mock retriever that will be returned by as_retriever
-        mock_retriever = mocker.MagicMock()
+        # Get the mock retriever INSTANCE returned by the mocked as_retriever method
+        mock_retriever = mock_app_context.store.as_retriever()
+        # Configure the invoke method ON the mock retriever instance
         mock_retriever.invoke = mocker.AsyncMock(return_value=test_docs)
 
-        # Configure the store's as_retriever to return our mock_retriever
-        mock_app_context.store.as_retriever.return_value = mock_retriever
-
         # Patch the server's get_context to return our mock context
+        # NOTE: This might be redundant if the tool correctly uses the lifespan context.
+        # Consider if this patch is still necessary with the new AppContext setup.
+        # For now, keeping it to ensure the tool gets the context if it doesn't use lifespan.
         mocker.patch("oh_my_ai_docs.avectorstore_mcp.mcp_server.get_context", return_value=mock_app_context)
 
         query_text = "find relevant info"
@@ -183,9 +184,10 @@ class TestAVectorStoreMCPServer:
         assert response_data["scores"] == [0.9, 0.8]
         assert response_data["total_found"] == 2
 
-        # Verify the retriever was called correctly
-        mock_retriever.invoke.assert_called_once_with(query_text)
+        # Verify the as_retriever METHOD was called ONCE on the store instance
         mock_app_context.store.as_retriever.assert_called_once()
+        # Verify the invoke method was called ONCE on the mock RETRIEVER instance
+        mock_retriever.invoke.assert_called_once_with(query_text)
 
     @pytest.mark.anyio
     @pytest.mark.fastmcp_tools
@@ -210,10 +212,15 @@ class TestAVectorStoreMCPServer:
         mcp_server_instance: FastMCP
     ):
         """Test when the underlying retriever raises an exception."""
-        mock_retriever = mock_app_context.store.as_retriever()
         error_message = "Vector store connection failed"
-        # Mock asyncio.to_thread to raise an exception
-        mock_invoke = mocker.patch("asyncio.to_thread", side_effect=RuntimeError(error_message))
+
+        # Get the mock retriever instance
+        mock_retriever = mock_app_context.store.as_retriever()
+        # Mock the invoke method ON the retriever instance to raise an error
+        mock_retriever.invoke = mocker.AsyncMock(side_effect=RuntimeError(error_message))
+
+        # Patch get_context if necessary (as above)
+        mocker.patch("oh_my_ai_docs.avectorstore_mcp.mcp_server.get_context", return_value=mock_app_context)
 
         async with client_session(mcp_server_instance._mcp_server) as client:
             with pytest.raises(McpError) as exc_info:
@@ -223,6 +230,9 @@ class TestAVectorStoreMCPServer:
         assert "Failed to query vectorstore" in str(exc_info.value)
         assert error_message in str(exc_info.value) # Include original error
         # assert exc_info.value.code == "INTERNAL_ERROR" or exc_info.value.code == -32603
+        # Verify as_retriever and invoke were called
+        mock_app_context.store.as_retriever.assert_called_once()
+        mock_retriever.invoke.assert_called_once_with("trigger error")
 
     @pytest.mark.anyio
     @pytest.mark.fastmcp_tools
@@ -234,9 +244,13 @@ class TestAVectorStoreMCPServer:
         mcp_server_instance: FastMCP
     ):
         """Test when the query operation times out."""
+        # Get the mock retriever instance
         mock_retriever = mock_app_context.store.as_retriever()
-        # Mock asyncio.to_thread to raise TimeoutError
-        mock_invoke = mocker.patch("asyncio.to_thread", side_effect=asyncio.TimeoutError("Query took too long"))
+        # Mock the invoke method ON the retriever instance to raise TimeoutError
+        mock_retriever.invoke = mocker.AsyncMock(side_effect=asyncio.TimeoutError("Query took too long"))
+
+        # Patch get_context if necessary (as above)
+        mocker.patch("oh_my_ai_docs.avectorstore_mcp.mcp_server.get_context", return_value=mock_app_context)
 
         # The server code currently doesn't have an explicit timeout block,
         # so this test assumes the underlying call might timeout or FastMCP handles it.
@@ -249,6 +263,9 @@ class TestAVectorStoreMCPServer:
         # Check if the server translates TimeoutError appropriately
         assert "Query operation timed out" in str(exc_info.value) # Based on server's catch block
         # assert exc_info.value.code == "INTERNAL_ERROR" # Or a specific timeout code if defined
+        # Verify as_retriever and invoke were called
+        mock_app_context.store.as_retriever.assert_called_once()
+        mock_retriever.invoke.assert_called_once_with("timeout query")
 
     # -- Resource ('module_documentation') Tests --
 
@@ -371,18 +388,21 @@ class TestAVectorStoreMCPServer:
         mcp_server_instance: FastMCP
     ):
         """Verify that the AppContext from the lifespan is accessible within the tool."""
-        # We already mocked get_context in the mock_app_context fixture.
-        # Now, we just need to ensure the tool *uses* it.
-        # Spy on the store access within the tool
-        store_spy = mocker.spy(mock_app_context.store, "as_retriever")
+        # Patch get_context to ensure the tool receives our mock context
+        # This assumes the tool uses `mcp_server.get_context()` instead of directly
+        # accessing the lifespan context from the raw request context.
+        mocker.patch("oh_my_ai_docs.avectorstore_mcp.mcp_server.get_context", return_value=mock_app_context)
 
-        # Mock the actual retrieval part to avoid errors
+        # Get the mock retriever instance from the context's store
         mock_retriever = mock_app_context.store.as_retriever()
-        mocker.patch("asyncio.to_thread", return_value=[Document(page_content="Doc")])
+        # Mock the actual retrieval part to avoid errors and return a dummy doc
+        mock_retriever.invoke = mocker.AsyncMock(return_value=[Document(page_content="Doc")])
 
         # Call the tool
         async with client_session(mcp_server_instance._mcp_server) as client:
             await client.call_tool("query_docs", {"query": "check context"})
 
-        # Assert that the store's method (accessed via context) was called
-        store_spy.assert_called_once()
+        # Assert that the store's as_retriever method was called
+        mock_app_context.store.as_retriever.assert_called_once()
+        # Assert that the invoke method on the returned retriever was called
+        mock_retriever.invoke.assert_called_once_with("check context")

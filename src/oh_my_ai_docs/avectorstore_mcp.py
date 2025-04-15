@@ -8,6 +8,7 @@
 # pyright: reportAttributeAccessIssue=false
 # pyright: reportInvalidTypeForm=false
 # pyright: reportUnusedVariable=false
+# pyright: reportConstantRedefinition=false
 
 from __future__ import annotations
 
@@ -23,7 +24,9 @@ from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Type, TypeVar, cast
+
+# Add these imports at the top of the file
+from typing import Any, ClassVar, Dict, List, Optional, Type, TypeVar, cast
 
 import aiofiles
 from langchain.vectorstores import VectorStore
@@ -43,6 +46,38 @@ from mcp.types import (
     Tool,
 )
 from pydantic import BaseModel, Field, field_validator
+
+# Add this after the BASE_PATH and DOCS_PATH declarations
+# Global embeddings configuration
+_EMBEDDINGS_PROVIDER: Embeddings | None = None
+
+
+def set_embeddings_provider(embeddings: Embeddings) -> None:
+    """
+    Set the embeddings provider to use for vectorstore operations.
+    This allows for dependency injection, particularly useful in testing.
+
+    Args:
+        embeddings: The embeddings provider to use
+    """
+    global _EMBEDDINGS_PROVIDER
+    _EMBEDDINGS_PROVIDER = embeddings
+
+
+def get_embeddings_provider() -> Embeddings:
+    """
+    Get the configured embeddings provider, or create a default one if none is set.
+
+    Returns:
+        The embeddings provider to use for vectorstore operations
+    """
+    global _EMBEDDINGS_PROVIDER
+    if _EMBEDDINGS_PROVIDER is None:
+        from langchain_openai import OpenAIEmbeddings
+
+        _EMBEDDINGS_PROVIDER = OpenAIEmbeddings(model="text-embedding-3-large")
+    return _EMBEDDINGS_PROVIDER
+
 
 # Configure logging
 logger = get_logger(__name__)
@@ -223,8 +258,8 @@ def get_vectorstore_path() -> Path:
 def vectorstore_factory(
     store: VectorStore | None = None,
     embeddings: Embeddings | None = None,
-    vector_store_cls: type[VectorStore] = None,
-    vector_store_kwargs: dict[str, Any] = None,
+    vector_store_cls: type[VectorStore] = SKLearnVectorStore,
+    vector_store_kwargs: dict[str, Any] | None = None,
 ) -> VectorStore:
     """
     Factory function to create or return a vector store.
@@ -241,15 +276,8 @@ def vectorstore_factory(
     if store:
         return store
 
-    if vector_store_cls is None:
-        from langchain.vectorstores import SKLearnVectorStore
-
-        vector_store_cls = SKLearnVectorStore
-
-    if embeddings is None:
-        from langchain.embeddings.openai import OpenAIEmbeddings
-
-        embeddings = OpenAIEmbeddings(model="text-embedding-3-large")
+    # Use the provided embeddings or get the configured one
+    embeddings = embeddings or get_embeddings_provider()
 
     if vector_store_kwargs is None:
         vector_store_kwargs = {}
@@ -268,25 +296,43 @@ def vectorstore_factory(
     return vector_store_cls(**vector_store_kwargs)
 
 
+# @asynccontextmanager
+# async def vectorstore_session(server: FastMCP) -> AsyncIterator[AppContext]:
+#     """Context manager for vectorstore operations."""
+#     vectorstore_path = get_vectorstore_path()
+#     try:
+#         # logger.debug(f"Opening vectorstore session: {vectorstore_path}")
+#         store = SKLearnVectorStore(
+#             embedding=OpenAIEmbeddings(model="text-embedding-3-large"),
+#             persist_path=str(vectorstore_path),
+#             serializer="parquet",
+#         )
+#         yield AppContext(store=store)
+#         # logger.debug("Vectorstore session completed")
+#     except Exception as e:
+#         # logger.error(f"Error in vectorstore session: {e}", exc_info=True)
+#         raise
+#     finally:
+#         # Cleanup if needed
+#         # logger.debug("Vectorstore session cleanup complete")
+#         pass
+
+
 @asynccontextmanager
 async def vectorstore_session(server: FastMCP) -> AsyncIterator[AppContext]:
     """Context manager for vectorstore operations."""
-    vectorstore_path = get_vectorstore_path()
     try:
-        # logger.debug(f"Opening vectorstore session: {vectorstore_path}")
-        store = SKLearnVectorStore(
-            embedding=OpenAIEmbeddings(model="text-embedding-3-large"),
-            persist_path=str(vectorstore_path),
-            serializer="parquet",
+        # Use the factory with the configured embeddings provider
+        store = vectorstore_factory(
+            embeddings=get_embeddings_provider(),
+            vector_store_cls=SKLearnVectorStore,
+            vector_store_kwargs={"persist_path": str(get_vectorstore_path()), "serializer": "parquet"},
         )
         yield AppContext(store=store)
-        # logger.debug("Vectorstore session completed")
     except Exception as e:
-        # logger.error(f"Error in vectorstore session: {e}", exc_info=True)
         raise
     finally:
         # Cleanup if needed
-        # logger.debug("Vectorstore session cleanup complete")
         pass
 
 

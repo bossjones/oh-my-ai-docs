@@ -9,7 +9,7 @@ import logging
 import sys
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Protocol, cast
-from collections.abc import AsyncGenerator
+from collections.abc import AsyncGenerator, Iterator
 
 import pytest
 from pytest import MonkeyPatch
@@ -101,115 +101,78 @@ class AVectorStoreMCPServer:
 
 # --- Embedding Fixtures --- #
 
-@pytest.fixture(scope="function")
-def mock_openai_embeddings(mocker: MockerFixture) -> FakeEmbeddings:
-    """Fixture to provide fake embeddings, mocking the real import.
-
-    Scope: function - ensures fresh embeddings for each test
-    Args:
-        mocker: pytest-mock's mocker fixture
-    Returns: FakeEmbeddings instance
-
-    This fixture mocks the OpenAIEmbeddings import in the server code to return
-    fake embeddings, preventing real API calls during tests.
-    """
-    fake_embeddings = FakeEmbeddings()
-    mocker.patch("oh_my_ai_docs.avectorstore_mcp.OpenAIEmbeddings", return_value=fake_embeddings)
-    return fake_embeddings
+@pytest.fixture(scope="session")
+def mock_openai_embeddings() -> FakeEmbeddings:
+    """Provides a consistent fake embeddings generator for testing."""
+    return FakeEmbeddings()
 
 # --- VectorStore Fixtures --- #
 
+# Remove the old mock_vectorstore fixture entirely
+# Remove the old vectorstore_session fixture entirely
+
+# Add the new mock_app_context fixture
 @pytest.fixture(scope="function")
-def mock_vectorstore(mocker: MockerFixture, mock_openai_embeddings: FakeEmbeddings) -> SKLearnVectorStore:
-    """Provides a mocked SKLearnVectorStore instance.
-
-    Scope: function - ensures test isolation
-    Args:
-        mocker: pytest-mock's mocker fixture
-        mock_openai_embeddings: The fake embeddings fixture
-    Returns: Mocked SKLearnVectorStore instance
-
-    This fixture mocks the SKLearnVectorStore class and the vectorstore_factory function
-    to ensure tests don't create real vector stores or make API calls.
+def mock_app_context(
+    mocker: MockerFixture,
+    mock_openai_embeddings: FakeEmbeddings,
+    tmp_path: Path # Use tmp_path for persistence path in factory
+) -> Iterator[AppContext]:
     """
-    mock_store = mocker.MagicMock(spec=SKLearnVectorStore)
-    mock_store.embedding = mock_openai_embeddings
+    Provides an AppContext suitable for testing tool/resource functions.
 
-    mock_retriever = mocker.MagicMock()  # Use generic mock instead of spec
-    mock_store.as_retriever.return_value = mock_retriever
-
-    mocker.patch("oh_my_ai_docs.avectorstore_mcp.vectorstore_factory", return_value=mock_store)
-    return mock_store
-
-@pytest.fixture(scope="function")
-async def vectorstore_session() -> AsyncGenerator[SKLearnVectorStore, None]:
-    """Fixture providing a mock vectorstore session.
-
-    Scope: function - ensures test isolation
-    Yields: Configured SKLearnVectorStore instance
-    Cleanup: Automatically handled via AsyncGenerator
+    - Injects FakeEmbeddings globally for the test's scope via set_embeddings_provider.
+    - Uses the real vectorstore_factory to create an SKLearnVectorStore instance,
+      ensuring it uses the FakeEmbeddings.
+    - Mocks the as_retriever() method on the created store instance to return
+      a mock retriever object, allowing tests to control retriever behavior
+      (e.g., mock the invoke method on the returned retriever).
+    - Returns an AppContext containing the store.
+    - Resets the global embeddings provider upon teardown for test isolation.
     """
-    # Create the vectorstore with proper initialization
-    store = SKLearnVectorStore(
-        embedding=FakeEmbeddings(),
-        persist_path="mock_path",
-        serializer="parquet",
+    # Import necessary functions from the module under test
+    from oh_my_ai_docs.avectorstore_mcp import (
+        _EMBEDDINGS_PROVIDER,
+        set_embeddings_provider,
+        vectorstore_factory,
+        AppContext,
     )
+    from langchain_core.vectorstores import VectorStoreRetriever # For spec
 
-    # Create a properly typed mock for add_documents
-    original_add_documents = store.add_documents
-    store.add_documents = lambda documents, **kwargs: []  # type: ignore
+    # Inject fake embeddings for this test's scope
+    original_embeddings = _EMBEDDINGS_PROVIDER
+    set_embeddings_provider(mock_openai_embeddings)
 
-    # Create a properly typed mock for as_retriever
-    original_as_retriever = store.as_retriever
-
-    # Mock retriever behavior without using VectorStoreRetriever directly
-    class MockRetriever:
-        """Mock retriever implementation."""
-        def __init__(self, vectorstore: Any):
-            self.vectorstore = vectorstore
-
-        def get_relevant_documents(self, query: str) -> list[Document]:
-            """Return mock documents for testing."""
-            return [
-                Document(page_content="Relevant document 1", metadata={"source": "doc1", "score": 0.9}),
-                Document(page_content="Relevant document 2", metadata={"source": "doc2", "score": 0.8}),
-            ]
-
-    # Configure the mock retriever
-    mock_retriever = MockRetriever(vectorstore=store)
-    store.as_retriever = lambda **kwargs: mock_retriever  # type: ignore
-
-    # Yield the store for test use
-    yield store
-
-    # Restore original methods (if needed for cleanup)
-    store.add_documents = original_add_documents  # type: ignore
-    store.as_retriever = original_as_retriever  # type: ignore
-
-# --- Server Fixtures --- #
-
-@pytest.fixture(scope="function")
-def mcp_server(monkeypatch: pytest.MonkeyPatch) -> AVectorStoreMCPServer:
-    """Fixture to provide a configured MCP server for testing.
-
-    Scope: function - ensures test isolation
-    Args:
-        monkeypatch: pytest's monkeypatch fixture
-    Returns: Configured AVectorStoreMCPServer instance
-    """
     try:
-        # Import here to avoid import errors during fixture collection
-        from oh_my_ai_docs.avectorstore_mcp import mcp_server as real_mcp_server
+        # Create a store using the real factory, which will pick up the fake embeddings
+        # Provide a temporary path for persistence
+        vectorstore_path = tmp_path / "mock_vectorstore.parquet"
+        store = vectorstore_factory(
+            vector_store_cls=SKLearnVectorStore,
+            vector_store_kwargs={
+                "persist_path": str(vectorstore_path),
+                "serializer": "parquet",
+                # embeddings are handled by the factory via get_embeddings_provider
+            }
+        )
 
-        # Create test server wrapper
-        server = AVectorStoreMCPServer(real_mcp_server)
+        # Mock the as_retriever METHOD of the store INSTANCE
+        # It should return a mock RETRIEVER object.
+        mock_retriever_instance = mocker.MagicMock(spec=VectorStoreRetriever)
+        # Tests can now configure this instance, e.g.:
+        # retriever = app_context.store.as_retriever()
+        # retriever.invoke = AsyncMock(...)
+        mocker.patch.object(store, 'as_retriever', return_value=mock_retriever_instance)
 
-        # Return the test server
-        return server
-    except ImportError:
-        # This won't happen at runtime, just for linter satisfaction
-        raise RuntimeError("oh_my_ai_docs module not found")
+
+        # Create the AppContext with the configured store
+        app_context = AppContext(store=store)
+
+        yield app_context
+
+    finally:
+        # Restore original embeddings provider after the test
+        set_embeddings_provider(original_embeddings)
 
 # --- Logging Fixtures --- #
 
@@ -268,15 +231,3 @@ def mock_vectorstore_session_logging(monkeypatch: pytest.MonkeyPatch) -> None:
 
     # Apply the patch
     monkeypatch.setattr("oh_my_ai_docs.avectorstore_mcp.vectorstore_session", wrapped_session)
-
-@pytest.fixture(scope="function")
-def mock_app_context(mocker: MockerFixture, mock_vectorstore: SKLearnVectorStore) -> AppContext:
-    """Provides a mocked AppContext instance.
-
-    Scope: function - ensures test isolation
-    Args:
-        mocker: pytest-mock's mocker fixture
-        mock_vectorstore: The mocked vectorstore fixture
-    Returns: AppContext instance with mocked store
-    """
-    return AppContext(store=mock_vectorstore)
