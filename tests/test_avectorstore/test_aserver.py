@@ -28,11 +28,12 @@ from langchain_core.vectorstores import VectorStoreRetriever
 # --- MCP Imports ---
 from mcp import ClientSession
 from mcp.server.fastmcp import FastMCP, Context
+from mcp.server.fastmcp.tools.base import Tool
 from mcp.server.fastmcp.exceptions import ResourceError
 from mcp.server.session import ServerSession
 from mcp.shared.exceptions import McpError
 from mcp.shared.memory import create_connected_server_and_client_session as client_session
-from mcp.types import TextContent, Tool, Resource
+from mcp.types import TextContent
 
 # --- Project Imports ---
 # Assume the server code is accessible, adjust path if needed

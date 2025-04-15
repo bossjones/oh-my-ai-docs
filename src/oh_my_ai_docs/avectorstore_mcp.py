@@ -40,6 +40,7 @@ from mcp.server.fastmcp.utilities.logging import get_logger
 from mcp.server.session import ServerSession
 from mcp.types import (
     TextContent,
+    Tool,
 )
 from pydantic import BaseModel, Field, field_validator
 

@@ -14,6 +14,13 @@ alwaysApply: false
 - ALWAYS run `tree tests` to verify test folder structure before writing any test code
 - ALWAYS search for fixture references in conftest.py and related test files
 - ALWAYS use grep/search to find similar tests or patterns before writing new ones
+- ALWAYS use precise test selection when debugging failures
+- ALWAYS generate isolated test commands for each failing test
+- ALWAYS use the following command format for debugging individual failing tests:
+  ```
+  uv run pytest -s --verbose --showlocals --tb=short <test_path>::<TestClass>::<test_method>
+  ```
+- ALWAYS analyze test failures one by one, starting with the first failure
 - ALWAYS use `<quotes>...</quotes>` tags when quoting relevant code from existing files
 - ALWAYS use `<thinking>...</thinking>` to document your reasoning process before writing any code
 - NEVER generate test code without first examining folder structure and fixture references
