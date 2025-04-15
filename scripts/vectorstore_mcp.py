@@ -2,6 +2,7 @@
 # pyright: reportUnknownArgumentType=false
 # pyright: reportUnusedCoroutine=false
 # DO NOT MAKE THIS SERVER ASYNC
+from __future__ import annotations
 
 import argparse
 import glob

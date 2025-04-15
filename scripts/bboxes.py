@@ -19,6 +19,8 @@ This script uses Google's Generative AI (Gemini) to analyze images and:
 The script supports command-line arguments for customizing detection mode, input/output paths,
 and appearance of the bounding boxes.
 """
+from __future__ import annotations
+
 import argparse
 import functools
 import io

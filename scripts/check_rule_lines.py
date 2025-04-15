@@ -16,6 +16,7 @@ python3 check_rule_lines.py .cursor/rules/ --max-lines 25
 # Show details for all files
 python3 check_rule_lines.py .cursor/rules/ -v
 """
+from __future__ import annotations
 
 import argparse
 import os

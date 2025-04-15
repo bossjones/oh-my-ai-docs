@@ -127,7 +127,7 @@ def test_file_structure(tmp_path: Path, monkeypatch: MonkeyPatch) -> dict[str, P
 
     # Create dummy vectorstore file (though it won't be loaded by mock)
     vectorstore_file = vectorstore_path / f"{TEST_MODULE}_vectorstore.parquet"
-    vectorstore_file.touch()
+    # vectorstore_file.touch()
 
     # Patch the paths used in the server code
     monkeypatch.setattr("oh_my_ai_docs.avectorstore_mcp.BASE_PATH", base_dir)
@@ -182,24 +182,23 @@ def mock_openai_embeddings() -> FakeEmbeddings:
 # Remove the old mock_vectorstore fixture entirely
 # Remove the old vectorstore_session fixture entirely
 
-# Add the new mock_app_context fixture
+# Refactored app_context fixture using test_file_structure
 @pytest.fixture(scope="function")
-def mock_app_context(
-    mocker: MockerFixture,
+def fixture_app_context(
+    test_file_structure: dict[str, Path],
     mock_openai_embeddings: FakeEmbeddings,
-    tmp_path: Path # Use tmp_path for persistence path in factory
+    mocker: MockerFixture, # Keep mocker for potential future use or if other parts need it
 ) -> Iterator[AppContext]:
     """
-    Provides an AppContext suitable for testing tool/resource functions.
+    Provides a realistic AppContext for testing, leveraging test_file_structure.
 
-    - Injects FakeEmbeddings globally for the test's scope via set_embeddings_provider.
+    - Injects FakeEmbeddings globally for the test's scope.
     - Uses the real vectorstore_factory to create an SKLearnVectorStore instance,
-      ensuring it uses the FakeEmbeddings.
-    - Mocks the as_retriever() method on the created store instance to return
-      a mock retriever object, allowing tests to control retriever behavior
-      (e.g., mock the invoke method on the returned retriever).
-    - Returns an AppContext containing the store.
-    - Resets the global embeddings provider upon teardown for test isolation.
+      pointing to the temporary persistence path created by test_file_structure.
+    - Populates the store with documents read from the temporary docs file.
+    - Does NOT mock the retriever, allowing tests to interact with the real store logic.
+    - Returns an AppContext containing the initialized store.
+    - Resets the global embeddings provider upon teardown.
     """
     # Import necessary functions from the module under test
     from oh_my_ai_docs.avectorstore_mcp import (
@@ -208,38 +207,51 @@ def mock_app_context(
         vectorstore_factory,
         AppContext,
     )
-    from langchain_core.vectorstores import VectorStoreRetriever # For spec
+    from langchain_core.documents import Document # For creating documents
 
     # Inject fake embeddings for this test's scope
     original_embeddings = _EMBEDDINGS_PROVIDER
     set_embeddings_provider(mock_openai_embeddings)
 
     try:
-        # Create a store using the real factory, which will pick up the fake embeddings
-        # Provide a temporary path for persistence
-        vectorstore_path = tmp_path / "mock_vectorstore.parquet"
+        # --- Store Initialization ---
+        # Get the persistence path from the test_file_structure fixture
+        vectorstore_path = test_file_structure["vectorstore_file"]
+
+        # Create a store using the real factory
         store = vectorstore_factory(
             vector_store_cls=SKLearnVectorStore,
             vector_store_kwargs={
                 "persist_path": str(vectorstore_path),
                 "serializer": "parquet",
                 # embeddings are handled by the factory via get_embeddings_provider
-            }
+            },
+            # Pass the configured embeddings explicitly, though factory should pick it up
+            embeddings=mock_openai_embeddings
         )
 
-        # Mock the as_retriever METHOD of the store INSTANCE
-        # It should return a mock RETRIEVER object.
-        mock_retriever_instance = mocker.MagicMock(spec=VectorStoreRetriever)
-        # Tests can now configure this instance, e.g.:
-        # retriever = app_context.store.as_retriever()
-        # retriever.invoke = AsyncMock(...)
-        mocker.patch.object(store, 'as_retriever', return_value=mock_retriever_instance)
+        # --- Populate Store ---
+        # Read content from the temporary docs file
+        docs_file_path = test_file_structure["docs_file"]
+        if docs_file_path.exists():
+            content = docs_file_path.read_text()
+            # Simple split for example documents, adjust splitting as needed
+            texts = [p.strip() for p in content.split('\n\n') if p.strip()]
+            documents = [Document(page_content=t) for t in texts]
+
+            # Add documents to the store (SKLearnVectorStore.add_documents is sync)
+            if documents:
+                store.add_documents(documents)
+        else:
+            # Handle case where docs file might not exist, maybe log a warning
+            pass
 
 
-        # Create the AppContext with the configured store
-        app_context = AppContext(store=store)
+        # --- Create AppContext ---
+        # No mocking of as_retriever needed anymore
+        app_context_instance = AppContext(store=store)
 
-        yield app_context
+        yield app_context_instance
 
     finally:
         # Restore original embeddings provider after the test

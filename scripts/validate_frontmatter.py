@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """Script to validate frontmatter in cursor rule files."""
+from __future__ import annotations
 
 import os
 import re

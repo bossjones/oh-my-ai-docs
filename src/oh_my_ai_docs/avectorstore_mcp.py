@@ -46,12 +46,11 @@ from pathlib import Path
 from typing import Any, ClassVar, Dict, List, Optional, Type, TypeVar, cast
 
 import aiofiles
-from langchain.vectorstores import VectorStore
 from langchain_community.vectorstores import SKLearnVectorStore
 from langchain_core.documents.base import Document
 from langchain_core.embeddings import Embeddings
 from langchain_core.retrievers import BaseRetriever
-from langchain_core.vectorstores import VectorStoreRetriever
+from langchain_core.vectorstores import VectorStore, VectorStoreRetriever
 from langchain_openai import OpenAIEmbeddings
 from mcp import ClientSession, StdioServerParameters
 from mcp.server.fastmcp import Context, FastMCP
