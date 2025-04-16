@@ -194,8 +194,8 @@ def fixture_app_context(
     Provides a realistic AppContext for testing, leveraging test_file_structure.
 
     - Injects FakeEmbeddings globally for the test's scope.
-    - Uses the real vectorstore_factory to create an SKLearnVectorStore instance,
-      pointing to the temporary persistence path created by test_file_structure.
+    - Uses TextLoader to load documents with proper metadata.
+    - Uses the real vectorstore_factory to create an SKLearnVectorStore instance.
     - Splits and processes documents using RecursiveCharacterTextSplitter.
     - Properly persists the store using parquet serialization.
     - Returns an AppContext containing the initialized store.
@@ -210,6 +210,7 @@ def fixture_app_context(
     )
     from langchain_core.documents import Document
     from langchain.text_splitter import RecursiveCharacterTextSplitter
+    from langchain_community.document_loaders import TextLoader
     import tiktoken
 
     # Inject fake embeddings for this test's scope
@@ -220,44 +221,49 @@ def fixture_app_context(
     vectorstore_path = test_file_structure["vectorstore_file"]
     try:
 
-        # Create a store using the real factory
-        store: SKLearnVectorStore = vectorstore_factory(
-            vector_store_cls=SKLearnVectorStore,
-            vector_store_kwargs={
-                "persist_path": str(vectorstore_path),
-                "serializer": "parquet",
-            },
-            embeddings=mock_openai_embeddings
-        )
 
         # --- Document Processing ---
         docs_file_path = test_file_structure["docs_file"]
-        if docs_file_path.exists():
-            content = docs_file_path.read_text()
 
-            # Initialize text splitter using tiktoken for accurate token counting
+        if docs_file_path.exists():
+            # Use TextLoader to load the document with proper metadata
+            loader = TextLoader(str(docs_file_path))
+            documents = loader.load()
             text_splitter = RecursiveCharacterTextSplitter.from_tiktoken_encoder(
                 chunk_size=8000,
                 chunk_overlap=500
             )
 
-            # Create initial documents
-            texts = [p.strip() for p in content.split('\n\n') if p.strip()]
-            documents = [Document(page_content=t) for t in texts]
+            # >>> documents[0].metadata
+            # {'source': '/private/var/folders/q_/d5r_s8wd02zdx6qmc5f_96mw0000gp/T/pytest-of-malcolm/pytest-99/test_query_success0/test_repo/docs/ai_docs/dpytest/dpytest_docs.tx
+            # t'}
 
             # Split documents into chunks
-            split_docs = text_splitter.split_documents(documents)
+            split_docs: list[Document] = text_splitter.split_documents(documents)
+
+            # Create a store using the real factory
+            store: SKLearnVectorStore = vectorstore_factory(
+                vector_store_cls=SKLearnVectorStore,
+                vector_store_kwargs={
+                    "persist_path": str(vectorstore_path),
+                    "serializer": "parquet",
+                },
+                embeddings=mock_openai_embeddings
+            ).from_documents(documents=split_docs, embedding=mock_openai_embeddings, persist_path=str(vectorstore_path), serializer="parquet")
 
             # Add split documents to the store
             if split_docs:
-                store.add_documents(split_docs)
+                # store.add_documents(split_docs)
+                store.from_documents(split_docs, mock_openai_embeddings)
 
                 # Persist the store
                 if hasattr(store, 'persist'):
                     store.persist()
 
+
+
         # --- Create AppContext ---
-        app_context_instance = AppContext(store=store)
+        app_context_instance = AppContext(store=store)  # type: ignore
 
         yield app_context_instance
 
@@ -272,63 +278,7 @@ def fixture_app_context(
             except Exception as e:
                 print(f"Warning: Could not delete vectorstore file: {e}")
 
-# --- Logging Fixtures --- #
 
-@pytest.fixture(scope="function")
-def mock_vectorstore_session_logging(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Fixture to mock vectorstore_session for logging tests.
-
-    Scope: function - ensures test isolation
-    Args:
-        monkeypatch: pytest's monkeypatch fixture
-    Returns: None - this fixture only applies patches
-    """
-    # Skip if real_vectorstore_session is None (would only happen in linter)
-    if real_vectorstore_session is None:
-        return
-
-    # Original function to wrap
-    original_session = real_vectorstore_session
-
-    # Create a wrapper that adds logging
-    @asynccontextmanager
-    async def wrapped_session(*args: Any, **kwargs: dict[str, Any]) -> AsyncGenerator[SKLearnVectorStore, None]:
-        module = kwargs.get("module", "unknown")
-        logger = logging.getLogger("oh_my_ai_docs.avectorstore_mcp")
-        logger.info(f"Entering vectorstore session for {module}")
-        try:
-            store = SKLearnVectorStore(
-                embedding=FakeEmbeddings(),
-                persist_path="mock_path",
-                serializer="parquet",
-            )
-
-            # Create mock methods with proper signatures - avoid direct VectorStoreRetriever reference
-            class MockRetriever:
-                """Mock retriever for logging tests."""
-                def __init__(self, vectorstore: Any):
-                    self.vectorstore = vectorstore
-
-                def get_relevant_documents(self, query: str) -> list[Document]:
-                    """Return mock documents with module reference."""
-                    return [
-                        Document(page_content=f"Relevant doc 1 for {module}", metadata={"source": "doc1", "score": 0.9}),
-                        Document(page_content=f"Relevant doc 2 for {module}", metadata={"source": "doc2", "score": 0.8}),
-                    ]
-
-            # Apply mocks with proper type handling
-            store.add_documents = lambda documents, **kwargs: []  # type: ignore
-            mock_retriever = MockRetriever(vectorstore=store)
-            store.as_retriever = lambda **kwargs: mock_retriever  # type: ignore
-
-            logger.info(f"Loaded vector store for {module}")
-            yield store
-            logger.info(f"Retrieved all 2 documents for {module}")
-        finally:
-            logger.info(f"Exiting vectorstore session for {module}")
-
-    # Apply the patch
-    monkeypatch.setattr("oh_my_ai_docs.avectorstore_mcp.vectorstore_session", wrapped_session)
 
 # def count_tokens(text: str, model: str = "cl100k_base") -> int:
 #     """Count tokens in text using tiktoken."""

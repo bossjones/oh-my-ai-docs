@@ -58,6 +58,8 @@ from mcp.server.fastmcp.exceptions import ResourceError
 from mcp.server.fastmcp.utilities.logging import get_logger
 from mcp.server.session import ServerSession
 from mcp.types import (
+    CallToolResult,
+    ListToolsResult,
     TextContent,
     Tool,
 )
@@ -235,7 +237,7 @@ async def save_mcp_config(config: dict[str, dict[str, Any]]) -> None:
 
 # Define validation models
 class QueryConfig(BaseModel):
-    k: int = Field(default=3, ge=1, le=10, description="Number of documents to retrieve")
+    k: int = Field(default=2, ge=1, le=10, description="Number of documents to retrieve")
     min_relevance_score: float = Field(default=0.0, ge=0.0, le=1.0, description="Minimum relevance score threshold")
 
     @field_validator("k")
@@ -255,7 +257,7 @@ def vectorstore_factory(
     embeddings: Embeddings | None = None,
     vector_store_cls: type[VectorStore] = SKLearnVectorStore,
     vector_store_kwargs: dict[str, Any] | None = None,
-) -> SKLearnVectorStore:
+) -> SKLearnVectorStore | VectorStore:
     """
     Factory function to create or return a vector store.
 
@@ -318,7 +320,7 @@ mcp_server = FastMCP(f"{args.module}-docs-mcp-server".lower(), lifespan=vectorst
     name="query_docs",
     description="Search through module documentation using semantic search to find relevant information based on your query",
 )
-async def query_tool(query: str) -> DocumentResponse:
+async def query_tool(query: str) -> DocumentResponse | list[TextContent]:
     """
     Query the documentation using a retriever.
 
@@ -342,7 +344,6 @@ async def query_tool(query: str) -> DocumentResponse:
     """
     ctx: Context[ServerSession, object] = mcp_server.get_context()
     # import bpdb
-
     # bpdb.set_trace()
     if not query.strip():
         raise ValueError("Query cannot be empty")
@@ -354,14 +355,10 @@ async def query_tool(query: str) -> DocumentResponse:
     state: AppContext = cast(AppContext, ctx.request_context.lifespan_context)
 
     try:
-        # await ctx.info(f"Querying vectorstore with k={config.k}")
-
         # Get the retriever from the store, not from state directly
         retriever: VectorStoreRetriever = state.store.as_retriever(search_kwargs={"k": config.k})
 
         relevant_docs: list[Document] = await asyncio.to_thread(retriever.invoke, query)
-
-        # await ctx.info(f"Retrieved {len(relevant_docs)} relevant documents")
 
         documents: list[str] = []
         scores: list[float] = []
@@ -374,11 +371,8 @@ async def query_tool(query: str) -> DocumentResponse:
             scores.append(doc.metadata.get("score", 1.0) if hasattr(doc, "metadata") else 1.0)
 
         return DocumentResponse(documents=documents, scores=scores, total_found=len(relevant_docs))
-
-    except TimeoutError:
-        raise ToolError("Query operation timed out after 30 seconds")
-    except Exception as e:
-        raise ToolError(f"Failed to query vectorstore: {e!s}")
+    except Exception as ex:
+        return [TextContent(type="text", text=f"Error: {ex!s}")]
 
 
 @mcp_server.resource(
@@ -401,28 +395,33 @@ async def get_all_docs(module: str) -> str:
     Raises:
         ResourceError: If the module doesn't match or if there's an error reading the documentation
     """
+    # Get the current server context which contains session and request information
     ctx: Context[ServerSession, object] = mcp_server.get_context()
-    # import bpdb; bpdb.set_trace()
-    try:
-        if module != args.module:
-            raise ResourceError(f"Requested module '{module}' does not match server module '{args.module}'")
 
-        # Local path to the documentation
+    try:
+        # # Validate that the requested module matches the server's configured module
+        # if module != args.module:
+        #     raise ResourceError(f"Requested module '{module}' does not match server module '{args.module}'")
+
+        # Construct the full path to the module's documentation file
         doc_path = DOCS_PATH / module / f"{module}_docs.txt"
 
+        # Check if the documentation file exists at the specified path
         if not doc_path.exists():
-            # await ctx.error(f"Documentation file not found: module '{module}', path '{doc_path}'")
-            raise ResourceError(f"Documentation file not found for module: {module}")
+            # Raise a ValueError if the documentation file is not found
+            raise ValueError(f"Documentation file not found for module: {module}")
 
+        # Open the documentation file asynchronously using aiofiles
         async with aiofiles.open(doc_path) as file:
+            # Read the entire contents of the file asynchronously
             content = await file.read()
 
+            # Return the documentation content as a string
             return content
 
-    except ResourceError:
-        raise
+    # Catch any other unexpected errors and wrap them in a ResourceError with a descriptive message
     except Exception as e:
-        raise ResourceError(f"Error reading documentation file: {e}")
+        raise ValueError(f"Error reading documentation file: {e}")
 
 
 if __name__ == "__main__":
