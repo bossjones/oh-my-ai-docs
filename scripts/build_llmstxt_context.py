@@ -4,6 +4,7 @@ from __future__ import annotations
 import argparse
 import os
 import re
+from collections.abc import Iterator
 from typing import Any, Dict, List, Tuple
 
 import tiktoken
@@ -74,6 +75,21 @@ def count_tokens(text: str, model: str = "cl100k_base") -> int:
     return len(encoder.encode(text))
 
 def bs4_extractor(html: str) -> str:
+    """
+    Extract clean text content from HTML using BeautifulSoup.
+
+    This function:
+    1. Parses HTML content using BeautifulSoup with lxml parser
+    2. Attempts to find the main article content (typically in documentation sites)
+    3. Falls back to whole document text if no article is found
+    4. Cleans up excessive whitespace in the extracted text
+
+    Args:
+        html (str): Raw HTML content to extract text from
+
+    Returns:
+        str: Cleaned text content with normalized whitespace
+    """
     soup = BeautifulSoup(html, "lxml")
 
     # Target the main article content for documentation
@@ -87,7 +103,7 @@ def bs4_extractor(html: str) -> str:
 
     return content
 
-def load_docs(module: str, dry_run: bool = False) -> tuple[list[Document], list[int]]:
+def load_docs(module: str, dry_run: bool = False) -> tuple[list[Document | Any], list[int]]:
     """
     Load documentation from specified module URLs.
 
@@ -100,15 +116,17 @@ def load_docs(module: str, dry_run: bool = False) -> tuple[list[Document], list[
         dry_run (bool): If True, only echo what would be done without loading
 
     Returns:
-        tuple: A list of Document objects and a list of tokens per document
+        tuple[list[Document | Any], list[int]]: A tuple containing:
+            - A list of Document objects (or Any for dry runs)
+            - A list of token counts per document
     """
     if module not in MODULE_URLS:
         raise ValueError(f"Module '{module}' not found. Available modules: {list(MODULE_URLS.keys())}")
 
-    urls = MODULE_URLS[module]
+    urls: list[str] = MODULE_URLS[module]
     print(f"{'[DRY RUN] Would load' if dry_run else 'Loading'} {module} documentation...")
 
-    docs = []
+    docs: list[Document | Any] = []
     for url in urls:
         if dry_run:
             print(f"[DRY RUN] Would load documents from URL: {url}")
@@ -121,7 +139,7 @@ def load_docs(module: str, dry_run: bool = False) -> tuple[list[Document], list[
             )
 
             # Load documents using lazy loading (memory efficient)
-            docs_lazy = loader.lazy_load()
+            docs_lazy: Iterator[Document] = loader.lazy_load()
 
             # Load documents and track URLs
             for d in docs_lazy:
@@ -138,9 +156,9 @@ def load_docs(module: str, dry_run: bool = False) -> tuple[list[Document], list[
 
         # Count total tokens in documents
         total_tokens = 0
-        tokens_per_doc = []
+        tokens_per_doc: list[int | Any] = []
         for doc in docs:
-            doc_tokens = count_tokens(doc.page_content)
+            doc_tokens: int = count_tokens(doc.page_content)
             total_tokens += doc_tokens
             tokens_per_doc.append(doc_tokens)
         print(f"Total tokens in loaded documents: {total_tokens}")
