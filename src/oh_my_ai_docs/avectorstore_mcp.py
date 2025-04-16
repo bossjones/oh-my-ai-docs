@@ -1,4 +1,16 @@
 #!/usr/bin/env python3
+# /// script
+# requires-python = ">=3.12"
+# dependencies = [
+#     "langchain-community",
+#     "langchain-core",
+#     "langchain-openai",
+#     "mcp[cli]",
+#     "aiofiles",
+#     "pydantic",
+# ]
+# ///
+
 # async version, will come back to this
 # pyright: reportUnknownArgumentType=false
 # pyright: reportMissingImports=false
@@ -64,6 +76,8 @@ from mcp.types import (
     Tool,
 )
 from pydantic import BaseModel, Field, field_validator
+
+logger = get_logger(__name__)
 
 # Add this after the BASE_PATH and DOCS_PATH declarations
 # Global embeddings configuration
@@ -164,7 +178,7 @@ async def get_config_info():
     """Get configuration information for display"""
     module_path = DOCS_PATH / args.module
     config = {
-        "server_name": f"{args.module}-docs-mcp-server".lower(),
+        "server_name": f"{args.module}-avectorstore-mcp".lower(),
         "module": args.module,
         "paths": {
             "base_path": str(BASE_PATH),
@@ -219,7 +233,7 @@ async def generate_mcp_config() -> dict[str, dict[str, Any]]:
     mcp_config: dict[str, dict[str, Any]] = {"mcpServers": {}}
 
     for module in modules:
-        server_name = f"{module}-docs-mcp-server".lower()
+        server_name = f"{module}-avectorstore-mcp".lower()
         mcp_config["mcpServers"][server_name] = {
             "command": "uv",
             "args": ["run", "--directory", str(BASE_PATH), f"./{relative_script_path}", "--module", module],
@@ -312,7 +326,7 @@ async def vectorstore_session(server: FastMCP) -> AsyncIterator[AppContext]:
 
 
 # Create an MCP server with module name
-mcp_server = FastMCP(f"{args.module}-docs-mcp-server".lower(), lifespan=vectorstore_session)
+mcp_server = FastMCP(f"{args.module}-avectorstore-mcp".lower(), lifespan=vectorstore_session)
 
 
 # Add a tool to query the documentation
@@ -424,9 +438,8 @@ async def get_all_docs(module: str) -> str:
         raise ValueError(f"Error reading documentation file: {e}")
 
 
-if __name__ == "__main__":
-    import asyncio
-
+def main() -> None:
+    """Entry point for the avectorstore MCP server."""
     try:
         if args.list_vectorstores:
             pass
@@ -435,4 +448,9 @@ if __name__ == "__main__":
             mcp_server.run(transport="stdio")
     except Exception as e:
         traceback.print_exc(file=sys.stderr)
+        logger.error(f"Error: {e!s}")
         sys.exit(1)
+
+
+if __name__ == "__main__":
+    main()

@@ -72,7 +72,7 @@ class TestAVectorStoreMCPServer:
     @pytest.mark.langchain_tool_integration
     async def test_server_initialization(self, mcp_server_instance: FastMCP):
         """Verify the server name is correctly set based on args."""
-        assert mcp_server_instance.name == f"{TEST_MODULE}-docs-mcp-server"
+        assert mcp_server_instance.name == f"{TEST_MODULE}-avectorstore-mcp"
 
     @pytest.mark.anyio
     @pytest.mark.fastmcp_tools

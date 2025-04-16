@@ -64,7 +64,7 @@ def get_config_info():
     """Get configuration information for display"""
     module_path = DOCS_PATH / args.module
     config = {
-        "server_name": f"{args.module}-docs-mcp-server".lower(),
+        "server_name": f"{args.module}-avectorstore-mcp".lower(),
         "module": args.module,
         "paths": {
             "base_path": str(BASE_PATH),
@@ -121,7 +121,7 @@ def generate_mcp_config() -> dict[str, dict[str, Any]]:
     }
 
     for module in modules:
-        server_name = f"{module}-docs-mcp-server".lower()
+        server_name = f"{module}-avectorstore-mcp".lower()
         server_args = [
             "run",
             "--directory", str(BASE_PATH),
@@ -172,7 +172,7 @@ def vectorstore_session(vectorstore_path: str) -> Generator[dict[str, SKLearnVec
 
 # Create an MCP server with module name
 mcp: FastMCP = FastMCP(
-    f"{args.module}-docs-mcp-server".lower(),
+    f"{args.module}-avectorstore-mcp".lower(),
     debug=args.debug,
     log_level="DEBUG" if args.debug else "INFO",
     transport='stdio',  # Set transport at initialization,
