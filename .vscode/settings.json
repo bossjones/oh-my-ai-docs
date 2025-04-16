@@ -43,8 +43,15 @@
     "python.terminal.activateEnvInCurrentTerminal": true,
     "files.exclude": {
         "**/__pycache__": true,
+        "**/.coverage.*": true,
+        "**/.mypy_cache": true,
+        "**/.pytest_cache": true,
+        "**/.venv": true,
+        "**/*.egg-info": true,
         "**/*.pyc": true,
-        "**/pycache": true
+        "**/~$*": true,
+        "**/htmlcov": true,
+        "**/pycache": true,
     },
     // Editor settings for Python files
     "editor.formatOnSave": true,
@@ -122,6 +129,11 @@
             "name": "loguru",
             "depth": 5,
             "includeAllSymbols": true
+        },
+        {
+            "name": "pytest",
+            "depth": 5,
+            "includeAllSymbols": true
         }
     ],
     "python.analysis.extraPaths": [
@@ -147,5 +159,16 @@
         "tag:yaml.org,2002:python/name:pymdownx.superfences.fence_code_format",
         "tag:yaml.org,2002:python/name:mermaid2.fence_mermaid_custom",
         "tag:yaml.org,2002:python/object/apply:pymdownx.slugs.slugify mapping"
-    ]
+    ],
+    "python.testing.unittestEnabled": false,
+    "python.testing.pytestEnabled": true,
+    "python.testing.pytestArgs": [
+        "tests"
+        // "-s",
+        // "--verbose",
+        // "--showlocals",
+        // "--tb=short",
+    ],
+    "python.testing.cwd": "${workspaceFolder}",
+    "python.testing.autoTestDiscoverOnSaveEnabled": true,
 }

@@ -1,0 +1,68 @@
+---
+description: This rule should be applied when implementing unit tests for LangChain vector store components. Apply this rule when (1) creating new vector store classes in LangChain, (2) implementing tests for existing vector stores, (3) troubleshooting vector store test failures, or (4) contributing to the LangChain ecosystem. This standardizes testing practices for vector store unit testing across LangChain integrations, ensuring consistent quality and behavior. Unit tests are essential for verifying vector stores function correctly without external dependencies.
+globs:
+alwaysApply: false
+---
+
+# LangChain Vector Store Unit Testing Standards
+
+## Critical Rules
+
+- Always place vector store unit tests in the `tests/unit_tests` directory
+- Test classes must subclass `VectorStoreUnitTests` from `langchain_tests.unit_tests`
+- Implement the required fixture in your test class:
+  - `vectorstore`: A pytest fixture that yields an empty vector store instance
+- Use the provided `_get_embeddings()` method to get a test embedding function
+- Run unit tests with network disabled using `--disable-socket --allow-unix-socket`
+- Pin the version of `langchain-tests` in your dependencies to avoid breaking changes
+- Never implement tests that rely on external services in unit tests
+- Ensure proper cleanup in the fixture's `finally` block
+- Run unit tests with `--asyncio-mode=auto` flag for proper async test handling
+
+## Examples
+
+<example>
+# tests/unit_tests/test_vectorstores.py
+
+from typing import Generator
+
+import pytest
+from langchain_parrot_link.vectorstores import ParrotVectorStore
+from langchain_core.vectorstores import VectorStore
+from langchain_tests.unit_tests import VectorStoreUnitTests
+
+class TestParrotStore(VectorStoreUnitTests):
+    @pytest.fixture()
+    def vectorstore(self) -> Generator[VectorStore, None, None]:
+        """Set up an empty vectorstore for unit tests."""
+        # Use the built-in _get_embeddings method for test embeddings
+        store = ParrotVectorStore(embedding=self._get_embeddings())
+        # Note: store should be EMPTY at this point
+        try:
+            yield store
+        finally:
+            # Cleanup operations
+            store.clear()  # Or appropriate cleanup method
+
+# Command to run tests:
+# uv run pytest --disable-socket --allow-unix-socket --asyncio-mode=auto tests/unit_tests
+</example>
+
+<example type="invalid">
+# test_vectorstore.py (incorrect location)
+
+from langchain_parrot_link.vectorstores import ParrotVectorStore
+from langchain_tests import VectorStoreUnitTests  # Incorrect import path
+
+class TestParrotStore:  # Missing inheritance from VectorStoreUnitTests
+    # Missing vectorstore fixture
+
+    def test_add_texts(self):
+        store = ParrotVectorStore()  # Missing embedding function
+        store.add_texts(["test document"])
+        results = store.similarity_search("test")
+        assert len(results) > 0
+
+    # No cleanup operations
+    # Missing proper test setup
+</example>

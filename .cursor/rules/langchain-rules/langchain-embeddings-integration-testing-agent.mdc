@@ -1,0 +1,123 @@
+---
+description: Apply this rule when implementing or modifying integration tests for Langchain embedding models. This rule should be used when a developer is creating integration tests for a new embedding model implementation, updating existing integration tests, or requesting guidance on proper integration test setup for Langchain embedding components. It ensures correct implementation of standard integration tests to verify embedding functionality with real external services, maintain consistency with Langchain standards, and ensure compatibility with the broader Langchain ecosystem. The rule is particularly important for ensuring proper integration test coverage during the development process and when preparing packages for distribution.
+globs:
+alwaysApply: false
+---
+
+# Langchain Embeddings Integration Testing Standards
+
+## Critical Rules
+
+- Always implement integration tests for any Langchain embedding implementation
+- Place integration tests in the `tests/integration_tests/` directory
+- Name test files following the pattern `test_embeddings.py` to ensure proper test discovery
+- Integration test classes must subclass `EmbeddingsIntegrationTests` from `langchain_tests.integration_tests`
+- Always implement the required properties:
+  - `embedding_cls` - return the embeddings model class to be tested
+  - `embedding_model_params` - return a dictionary of constructor parameters with real API credentials
+- Ensure your model implementation correctly implements all the required methods that will be tested:
+  - `embed_query` - embeds a single string query, returning a list of floats
+  - `embed_documents` - embeds a list of strings, returning a list of lists of floats
+  - `aembed_query` - async version that embeds a single string query
+  - `aembed_documents` - async version that embeds a list of strings
+- Pin the version of `langchain-tests` in your dependencies to avoid unexpected CI/CD pipeline breaks
+- Run integration tests with `--asyncio-mode=auto` flag to properly handle async tests
+- Use actual API credentials when running integration tests (via environment variables or secure storage)
+- Ensure all embeddings vectors have consistent dimensions across multiple invocations
+- Ensure all standard integration tests pass before submitting your integration
+
+## Integration Test Method Troubleshooting
+
+- `test_embed_query`: Ensure your model returns a list of floats when calling `.embed_query` on a string, and the length is consistent across inputs
+- `test_embed_documents`: Ensure your model returns a list of lists of floats when calling `.embed_documents` on a list of strings, and each embedded vector has the same length
+- `test_aembed_query`: Ensure your model implements the async version of embed_query correctly
+- `test_aembed_documents`: Ensure your model implements the async version of embed_documents correctly
+
+## Examples
+
+<example>
+```python
+"""Test embedding model integration tests."""
+
+from typing import Type
+from langchain_parrot_link.embeddings import ParrotLinkEmbeddings
+from langchain_tests.integration_tests import EmbeddingsIntegrationTests
+
+class TestParrotLinkEmbeddingIntegration(EmbeddingsIntegrationTests):
+    @property
+    def embedding_cls(self) -> Type[ParrotLinkEmbeddings]:
+        return ParrotLinkEmbeddings
+
+    @property
+    def embedding_model_params(self) -> dict:
+        # Include real API credentials for integration tests - preferably from environment variables
+        return {
+            "model": "production-embed-001",
+            "api_key": "actual-api-key-for-integration-tests"  # Better to use os.environ.get("API_KEY")
+        }
+```
+
+Command for running integration tests:
+```bash
+# set actual API credentials in environment
+export PARROT_LINK_API_KEY=your_actual_api_key
+
+# run integration tests
+uv run pytest --asyncio-mode=auto tests/integration_tests
+```
+</example>
+
+<example type="invalid">
+```python
+# Missing proper import of base test class and using incorrect class
+from langchain_parrot_link.embeddings import ParrotLinkEmbeddings
+from langchain_tests.unit_tests import EmbeddingsUnitTests  # WRONG BASE CLASS
+
+# Should use EmbeddingsIntegrationTests
+class TestParrotLinkEmbeddingIntegration(EmbeddingsUnitTests):  # WRONG BASE CLASS
+    @property
+    def embedding_cls(self) -> Type[ParrotLinkEmbeddings]:
+        return ParrotLinkEmbeddings
+
+    @property
+    def embedding_model_params(self) -> dict:
+        return {"model": "test-embed-001"}
+```
+
+```python
+# Wrong location - integration tests should be in dedicated integration test directory
+# tests/test_embeddings.py instead of tests/integration_tests/test_embeddings.py
+
+from typing import Type
+from langchain_parrot_link.embeddings import ParrotLinkEmbeddings
+from langchain_tests.integration_tests import EmbeddingsIntegrationTests
+
+class TestParrotLinkEmbeddingIntegration(EmbeddingsIntegrationTests):
+    # Missing actual API credentials for integration tests
+    @property
+    def embedding_model_params(self) -> dict:
+        return {"model": "test-embed-001"}  # No API key for real service calls
+```
+
+# Using test stub values for integration tests
+from typing import Type
+from langchain_parrot_link.embeddings import ParrotLinkEmbeddings
+from langchain_tests.integration_tests import EmbeddingsIntegrationTests
+import numpy as np
+
+class TestParrotLinkEmbeddingIntegration(EmbeddingsIntegrationTests):
+    @property
+    def embedding_cls(self) -> Type[ParrotLinkEmbeddings]:
+        return ParrotLinkEmbeddings
+
+    @property
+    def embedding_model_params(self) -> dict:
+        return {"model": "test-embed-001"}
+
+    # BAD PRACTICE: Mocking real API calls in integration tests
+    def test_embed_query(self, model):
+        # Should test with real API, not mocked data
+        return np.random.rand(384).tolist()
+</example>
+
+Use firecrawl or perplexity to search https://python.langchain.com/api_reference/standard_tests/integration_tests/langchain_tests.integration_tests.embeddings.EmbeddingsIntegrationTests.html for more information

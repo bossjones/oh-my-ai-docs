@@ -1,9 +1,10 @@
 ---
 description: This rule governs testing patterns for FastMCP context functionality. It should be applied whenever: (1) Writing tests for tools that use context injection, (2) Testing context-related features like logging or resource access, (3) Testing async context behavior, or (4) Testing context lifecycle and error handling. The rule ensures consistent and thorough testing of context functionality across FastMCP implementations.
-globs: tests/**/*test*.py
+globs:
 alwaysApply: false
 ---
 
+#  tests/**/*test*.py
 # FastMCP Context Testing Patterns
 
 ## Critical Rules

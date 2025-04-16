@@ -1,0 +1,137 @@
+---
+description: Apply this rule when implementing or modifying integration tests for Langchain tool components. This rule should be used when a developer is creating integration tests for a new tool implementation, updating existing integration tests, or requesting guidance on proper integration test setup for Langchain tool components. It ensures correct implementation of standard integration tests to verify tool functionality with real external services, maintain consistency with Langchain standards, and ensure compatibility with the broader Langchain ecosystem. The rule is particularly important for ensuring proper integration test coverage during the development process and when preparing packages for distribution.
+globs:
+alwaysApply: false
+---
+
+# Langchain Tools Integration Testing Standards
+
+## Critical Rules
+
+- Always implement integration tests for any Langchain tool implementation
+- Place integration tests in the `tests/integration_tests/` directory
+- Name test files following the pattern `test_tools.py` to ensure proper test discovery
+- Integration test classes must subclass `ToolIntegrationTests` from `langchain_tests.integration_tests`
+- Always implement the required properties:
+  - `tool_constructor` - return the tool class to be tested or an instantiated tool
+  - `tool_constructor_params` - return a dictionary of constructor parameters with real API credentials (if using a class constructor)
+  - `tool_invoke_params_example` - return a dictionary of valid parameters for the tool's `invoke` method
+- If testing an instantiated tool, pass it to `tool_constructor` and do not override `tool_constructor_params`
+- Pin the version of `langchain-tests` in your dependencies to avoid unexpected CI/CD pipeline breaks
+- Run integration tests with `--asyncio-mode=auto` flag to properly handle async tests
+- Use actual API credentials when running integration tests (via environment variables or secure storage)
+- Ensure tool_invoke_params_example contains valid parameters that will work with the real service
+- Ensure all standard integration tests pass before submitting your integration
+
+## Integration Test Method Troubleshooting
+
+- The standard tests verify that your tool properly:
+  - Connects to external services
+  - Handles real-world data and responses
+  - Returns expected output types and formats when used with real services
+  - Properly handles errors from external services
+- If tests fail, check that:
+  - API credentials are valid and have sufficient permissions
+  - Network connectivity to external services is available
+  - External service endpoints are correctly configured
+  - The tool correctly processes and formats responses from external services
+
+## Examples
+
+<example>
+```python
+"""Test tool integration tests."""
+
+from typing import Type
+from langchain_parrot_link.tools import ParrotTool
+from langchain_tests.integration_tests import ToolIntegrationTests
+import os
+
+class TestParrotMultiplyToolIntegration(ToolIntegrationTests):
+    @property
+    def tool_constructor(self) -> Type[ParrotTool]:
+        return ParrotTool
+
+    @property
+    def tool_constructor_params(self) -> dict:
+        # Include real API credentials for integration tests
+        return {
+            "api_key": os.environ.get("PARROT_API_KEY", "")
+        }
+
+    @property
+    def tool_invoke_params_example(self) -> dict:
+        # Should be valid params that work with the real service
+        return {"a": 2, "b": 3}
+```
+
+Command for running integration tests:
+```bash
+# set actual API credentials in environment
+export PARROT_API_KEY=your_actual_api_key
+
+# run integration tests
+uv run pytest --asyncio-mode=auto tests/integration_tests
+```
+</example>
+
+<example type="invalid">
+```python
+# Using unit test base class for integration tests
+from typing import Type
+from langchain_parrot_link.tools import ParrotTool
+from langchain_tests.unit_tests import ToolUnitTests  # WRONG BASE CLASS
+
+class TestParrotToolIntegration(ToolUnitTests):  # WRONG BASE CLASS
+    @property
+    def tool_constructor(self) -> Type[ParrotTool]:
+        return ParrotTool
+
+    @property
+    def tool_constructor_params(self) -> dict:
+        return {}
+
+    @property
+    def tool_invoke_params_example(self) -> dict:
+        return {"a": 2, "b": 3}
+```
+
+```python
+# Wrong location - tool integration tests should be in dedicated integration test directory
+# tests/test_tools.py instead of tests/integration_tests/test_tools.py
+
+from typing import Type
+from langchain_parrot_link.tools import ParrotTool
+from langchain_tests.integration_tests import ToolIntegrationTests
+
+class TestParrotToolIntegration(ToolIntegrationTests):
+    # Using mock credentials instead of real ones for integration tests
+    @property
+    def tool_constructor_params(self) -> dict:
+        return {"api_key": "fake_key_1234"}  # Should use real API key for integration tests
+```
+
+# Using tool_invoke_params_example that won't work with the real service
+from typing import Type
+from langchain_parrot_link.tools import ParrotTool
+from langchain_tests.integration_tests import ToolIntegrationTests
+import os
+
+class TestParrotToolIntegration(ToolIntegrationTests):
+    @property
+    def tool_constructor(self) -> Type[ParrotTool]:
+        return ParrotTool
+
+    @property
+    def tool_constructor_params(self) -> dict:
+        return {
+            "api_key": os.environ.get("PARROT_API_KEY", "")
+        }
+
+    @property
+    def tool_invoke_params_example(self) -> dict:
+        # Invalid parameters that will fail with the real service
+        return {"invalid_param": "value"}
+</example>
+
+use firecrawl or perplexity to look up https://python.langchain.com/api_reference/standard_tests/integration_tests/langchain_tests.integration_tests.tools.ToolsIntegrationTests.html for more info if you need it.

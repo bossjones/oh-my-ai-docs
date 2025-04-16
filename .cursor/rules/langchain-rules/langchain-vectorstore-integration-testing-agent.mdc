@@ -1,0 +1,83 @@
+---
+description: This rule should be applied when implementing integration tests for LangChain vector store components. Apply this rule when (1) testing vector stores that interact with external services, (2) validating end-to-end vector store functionality, (3) testing vector stores with real databases, or (4) contributing integration tests to the LangChain ecosystem. This standardizes integration testing practices across LangChain components, ensuring vector stores work properly with their intended external services and databases. Proper integration testing is essential for reliable vector storage and retrieval in production environments.
+globs:
+alwaysApply: false
+---
+
+# LangChain Vector Store Integration Testing Standards
+
+## Critical Rules
+
+- Always place vector store integration tests in the `tests/integration_tests` directory
+- Test classes must subclass `VectorStoreIntegrationTests` from `langchain_tests.integration_tests`
+- Implement the required fixture in your test class:
+  - `vectorstore`: A pytest fixture that yields an empty vector store instance connected to the real service
+- Use the provided `_get_embeddings()` method to get a test embedding function
+- Run integration tests with `--asyncio-mode=auto` flag for proper async test handling
+- Pin the version of `langchain-tests` in your dependencies to avoid breaking changes
+- Set up proper clean-up operations in the fixture's `finally` block to remove test data
+- Skip integration tests when required external services are unavailable
+- Use environment variables or secure methods to manage credentials needed for integration tests
+- Test with realistic documents and queries that exercise the vector store's integration with external services
+
+## Examples
+
+<example>
+# tests/integration_tests/test_vectorstores.py
+
+from typing import Generator
+import os
+import pytest
+
+from langchain_parrot_link.vectorstores import ParrotVectorStore
+from langchain_core.vectorstores import VectorStore
+from langchain_tests.integration_tests import VectorStoreIntegrationTests
+
+class TestParrotStore(VectorStoreIntegrationTests):
+    @pytest.fixture()
+    def vectorstore(self) -> Generator[VectorStore, None, None]:
+        """Set up an empty vectorstore for integration tests."""
+        # Skip if required credentials are not available
+        if "PARROT_API_KEY" not in os.environ:
+            pytest.skip("PARROT_API_KEY environment variable not set")
+
+        # Use the built-in _get_embeddings method for test embeddings
+        store = ParrotVectorStore(
+            embedding=self._get_embeddings(),
+            api_key=os.environ["PARROT_API_KEY"],
+            index_name="test-integration-index"
+        )
+
+        # Note: store should be EMPTY at this point
+        try:
+            yield store
+        finally:
+            # Cleanup operations
+            store.delete_collection()  # Or appropriate cleanup method
+
+# Command to run tests:
+# uv run pytest --asyncio-mode=auto tests/integration_tests
+</example>
+
+<example type="invalid">
+# tests/unit_tests/test_vectorstore_integration.py (incorrect location)
+
+from langchain_parrot_link.vectorstores import ParrotVectorStore
+from langchain_tests.unit_tests import VectorStoreUnitTests  # Wrong base class
+
+class TestParrotStore(VectorStoreUnitTests):  # Should use VectorStoreIntegrationTests
+    @pytest.fixture()
+    def vectorstore(self):
+        # Hardcoded API key is a security risk
+        store = ParrotVectorStore(
+            api_key="sk-123456",
+            embedding=self._get_embeddings()
+        )
+        return store  # Missing generator pattern with try/finally
+
+    # No cleanup operations
+    # No environment variable checks
+    # Integration test placed in unit_tests directory
+</example>
+
+use firecrawl or perplexity to look up https://python.langchain.com/api_reference/standard_tests/integration_tests/langchain_tests.integration_tests.vectorstores.VectorStoreIntegrationTests.html for more info if you need it.

@@ -1,0 +1,224 @@
+---
+description: This rule provides essential guidelines for implementing chat model unit tests in LangChain. It should be applied when: (1) Creating new chat model integrations, (2) Updating existing chat model tests, (3) Reviewing chat model unit tests for compliance, or (4) Debugging failed chat model unit tests. Following these standards ensures consistent test coverage across different chat model implementations, proper feature declaration, and isolation from network dependencies during testing.
+globs:
+alwaysApply: false
+---
+
+# LangChain Chat Model Unit Testing Standards
+
+## Critical Rules
+
+- **ALWAYS** subclass `ChatModelUnitTests` from `langchain_tests.unit_tests` for unit tests.
+- **ALWAYS** implement the required properties:
+  - `chat_model_class`: The class to be tested (e.g., `MyChatModel`).
+  - `chat_model_params`: A dictionary of parameters for initializing the chat model during tests (e.g., `{"model": "my-model-001", "temperature": 0}`).
+- **ALWAYS** place unit tests in the `tests/unit_tests/` directory within the specific integration package (e.g., `libs/partners/my-provider/tests/unit_tests/`).
+- **ALWAYS** specify which optional features are supported by overriding the relevant properties in your test class. Set to `True` if supported, `False` otherwise:
+  - `has_structured_output`: Supports `with_structured_output`.
+  - `has_tool_calling`: Supports `bind_tools`.
+  - `has_tool_choice`: Supports forcing tool calls via `tool_choice`.
+  - `returns_usage_metadata`: Returns token usage info.
+  - `supports_json_mode`: Supports JSON mode via `with_structured_output`.
+  - `supports_image_inputs`: Supports image content in messages.
+  - `supports_video_inputs`: Supports video content in messages.
+  - `supports_anthropic_inputs`: Supports Anthropic-style XML tool use blocks.
+  - `supports_image_tool_message`: Supports image content within `ToolMessage`.
+- If your model supports initialization from environment variables, implement the `init_from_env_params` property. It should return a tuple: `(env_vars_dict, model_init_params_dict, expected_extracted_params_dict)`.
+- Use appropriate skip conditions (`@pytest.mark.skipif`) for tests that don't apply to your specific model implementation based on the feature properties above.
+- **ALWAYS** run unit tests with network access disabled to ensure isolation:
+  ```bash
+  uv run pytest --disable-socket --allow-unix-socket --asyncio-mode=auto tests/unit_tests
+  ```
+- Pin the version of `langchain-tests` in your `pyproject.toml` dependencies to avoid unexpected test failures due to upstream changes.
+
+## Examples
+
+### Valid Example
+
+```python
+# libs/partners/my-provider/tests/unit_tests/test_chat_models.py
+from typing import Type, Tuple
+
+# Import your specific chat model class
+from langchain_mychatmodel.chat_models import MyChatModel
+# Import the base test class
+from langchain_tests.unit_tests import ChatModelUnitTests
+
+class TestMyChatModelUnit(ChatModelUnitTests):
+    @property
+    def chat_model_class(self) -> Type[MyChatModel]:
+        # Return the class being tested
+        return MyChatModel
+
+    @property
+    def chat_model_params(self) -> dict:
+        # Return parameters for initializing the model in tests
+        return {
+            "model": "my-model-001",
+            "temperature": 0,
+            # Add other necessary init params
+        }
+
+    # Example: If the model initializes API key from env
+    @property
+    def init_from_env_params(self) -> Tuple[dict, dict, dict]:
+        # (env vars to set, model init params, expected extracted params)
+        return (
+            {"MY_PROVIDER_API_KEY": "fake-key"},
+            {"model": "my-model-001"},
+            {"api_key": "fake-key"} # Check how the model stores the key
+        )
+
+    # Example: If the model supports tool calling
+    @property
+    def has_tool_calling(self) -> bool:
+        return True
+
+    # Example: If the model supports structured output
+    @property
+    def has_structured_output(self) -> bool:
+        return True
+
+    # Example: If usage metadata is returned
+    @property
+    def returns_usage_metadata(self) -> bool:
+        return True
+
+    # Add other relevant properties like:
+    # @property
+    # def supports_json_mode(self) -> bool:
+    #     return True # If JSON mode is supported
+
+    # @property
+    # def supports_image_inputs(self) -> bool:
+    #     return True # If image inputs are supported
+```
+
+### Invalid Example
+
+```python
+# Avoid writing tests from scratch like this:
+from langchain_mychatmodel.chat_models import MyChatModel
+import pytest
+
+# ❌ Not using the standard ChatModelUnitTests base class
+class TestMyChatModelManually:
+    def test_init(self):
+        # Reinventing initialization tests
+        model = MyChatModel(model="my-model", temperature=0)
+        assert model.model == "my-model"
+
+    # ❌ Writing custom invoke tests without leveraging standard patterns
+    def test_invoke(self):
+        model = MyChatModel(model="my-model", temperature=0)
+        result = model.invoke("hello")
+        assert result is not None
+
+# Avoid incomplete test class implementations:
+from langchain_tests.unit_tests import ChatModelUnitTests
+
+class TestMyChatModelIncomplete(ChatModelUnitTests):
+    # ❌ Missing required chat_model_class property
+
+    @property
+    def chat_model_params(self) -> dict:
+        # Params are provided...
+        return {"model": "my-model"}
+
+    # ❌ But not configuring *any* optional features (tool calling, structured output, etc.)
+    # This will likely lead to skipped tests or failures if the model
+    # supports features not declared here.
+```
+
+## ChatModelUnitTests API Reference (`langchain_tests.unit_tests.ChatModelUnitTests`)
+
+### Required Properties (Must be implemented in your test class)
+
+- `chat_model_class`: The chat model class (e.g., `MyChatModel`) being tested.
+- `chat_model_params`: A dictionary of parameters used to initialize the `chat_model_class` for testing.
+
+### Optional Properties (Override if applicable)
+
+- `init_from_env_params`: A tuple `(env_vars, init_params, expected_params)` for testing initialization from environment variables.
+- `has_structured_output` (`bool`): `True` if the model supports `with_structured_output`. Default: `False`.
+- `has_tool_calling` (`bool`): `True` if the model supports `bind_tools`. Default: `False`.
+- `has_tool_choice` (`bool`): `True` if the model supports forcing tool calls via a `tool_choice` parameter or equivalent. Default: `False`.
+- `returns_usage_metadata` (`bool`): `True` if usage metadata (like token counts) is returned on `.invoke()`, `.stream()`, `.batch()` responses. Default: `False`.
+- `structured_output_kwargs` (`dict`): Additional keyword arguments passed to `with_structured_output` during tests (e.g., `{"method": "function_calling"}` or `{"method": "json_mode"}`). Default: `{}`.
+- `supports_json_mode` (`bool`): `True` if the chat model supports JSON mode via `with_structured_output(..., method="json_mode")`. Default: `False`.
+- `supports_image_inputs` (`bool`): `True` if the chat model supports image inputs (e.g., Vision models). Default: `False`.
+- `supports_video_inputs` (`bool`): `True` if the chat model supports video inputs. Default: `False`.
+- `supports_anthropic_inputs` (`bool`): `True` if the model supports Anthropic-style inputs including `ToolMessage` with XML tool use blocks. Default: `False`.
+- `supports_image_tool_message` (`bool`): `True` if the model supports `ToolMessage` objects that contain image content. Default: `False`.
+- `supported_usage_metadata_details` (`Set[str]`): Controls which specific usage metadata details are expected (e.g., `"input_tokens"`, `"output_tokens"`, `"total_tokens"`, `"input_cost"`, `"output_cost"`, `"total_cost"`). Default: `{"input_tokens", "output_tokens", "total_tokens"}`.
+- `tool_choice_value`: (Deprecated since langchain-tests 0.3.15) Value used for tool choice testing.
+
+### Core Test Methods (Inherited and run automatically)
+
+- `test_init()`: Tests basic model initialization using `chat_model_params`.
+- `test_init_from_env()`: Tests initialization using `init_from_env_params`. Skipped if `init_from_env_params` is not implemented.
+- `test_init_streaming()`: Tests model initialization with `streaming=True`.
+- `test_serdes(model, snapshot)`: Tests serialization (`dumps`) and deserialization (`loads`). Skipped if the chat model class's `is_lc_serializable` property does not return `True`.
+- `test_standard_params(model)`: Tests that the model correctly handles standard parameters like `temperature`, `max_tokens`, `stop`, etc. See [Standard Parameters](https://python.langchain.com/docs/concepts/chat_models/#standard-parameters).
+- `test_bind_tool_pydantic(model, my_adder_tool)`: Tests `bind_tools` with Pydantic models. Skipped if `has_tool_calling` is `False`.
+- `test_with_structured_output(model, schema)`: Tests `with_structured_output`. Skipped if `has_structured_output` is `False`.
+- *(Plus many other tests for invoke, batch, stream, tool calling variations, etc.)*
+
+## Troubleshooting Test Failures
+
+Common failures and how to address them:
+
+#### `test_init`
+
+- **Failure Cause:** Model initialization failed with `chat_model_params`.
+- **Solution:**
+  - Double-check that all required parameters are in `chat_model_params`.
+  - Ensure the model correctly handles standard parameters if used (see `test_standard_params`).
+
+#### `test_init_from_env`
+
+- **Failure Cause:** Model didn't initialize correctly using the environment variables and parameters specified in `init_from_env_params`.
+- **Solution:**
+  - Verify the `(env_vars, init_params, expected_params)` tuple in `init_from_env_params` is correct.
+  - Check your model's `_init` or `validate_environment` logic for correctly reading environment variables and setting corresponding model attributes.
+
+#### `test_init_streaming`
+
+- **Failure Cause:** Model failed to initialize when `streaming=True` was passed.
+- **Solution:** Ensure your model's `__init__` method accepts a `streaming: bool` argument or handles it via `**kwargs`.
+
+#### `test_serdes`
+
+- **Failure Cause:** Serialization (`dumps`) or deserialization (`loads`) failed. Often related to environment-dependent parameters not being handled correctly.
+- **Solution:**
+  - Ensure your chat model class property `is_lc_serializable` returns `True`.
+  - Verify that `init_from_env_params` is correctly implemented if your model relies on environment variables for secrets (like API keys). The test uses this to simulate the environment during deserialization.
+  - Ensure all necessary parameters are included in serialization and correctly reconstructed during deserialization.
+
+#### `test_standard_params`
+
+- **Failure Cause:** Model doesn't correctly handle or map standard chat model parameters (e.g., `temperature`, `stop_sequences`, `max_tokens`).
+- **Solution:**
+  - Review the [Standard Parameters documentation](https://python.langchain.com/docs/concepts/chat_models/#standard-parameters).
+  - Ensure your model maps these standard parameters to its native API parameters correctly.
+  - Make sure the model class name follows conventions if applicable (e.g., `ChatProviderName` might influence some checks).
+
+#### `test_bind_tool_pydantic`
+
+- **Failure Cause:** Issues with binding Pydantic models as tools, often related to schema conversion.
+- **Solution:**
+  - Ensure `has_tool_calling` property is `True`.
+  - Verify your model's `bind_tools` implementation correctly converts Pydantic V2 models into the format expected by the underlying API (e.g., OpenAI function/tool format).
+  - Consider using LangChain Core's utility `convert_to_openai_tool` if targeting OpenAI-like APIs: [convert_to_openai_tool](https://python.langchain.com/api_reference/core/utils/langchain_core.utils.function_calling.convert_to_openai_tool.html).
+
+#### `test_with_structured_output`
+
+- **Failure Cause:** Issues with extracting structured output (Pydantic models or JSON) from the model's response.
+- **Solution:**
+  - Ensure `has_structured_output` property is `True`.
+  - Check your model's implementation of `with_structured_output` or the underlying methods it calls (like specialized tool calling or JSON mode).
+  - Verify correct handling based on the `method` (e.g., `"function_calling"`, `"json_mode"`) specified in `structured_output_kwargs`.
+  - If testing JSON mode, ensure `supports_json_mode` is `True`.
+  - See example implementations like [BaseChatOpenAI.with_structured_output](https://github.com/langchain-ai/langchain/blob/master/libs/partners/openai/langchain_openai/chat_models/base.py) for patterns.
+
+use firecrawl or perplexity to look up https://python.langchain.com/api_reference/standard_tests/unit_tests/langchain_tests.unit_tests.chat_models.ChatModelUnitTests.html for more info if you need it.

@@ -1,0 +1,131 @@
+---
+description: Apply this rule when implementing or modifying unit tests for Langchain tool integrations. This rule should be used when a developer is creating unit tests for a new tool implementation, updating existing unit tests, or requesting guidance on proper unit test setup for Langchain tool components. It ensures correct implementation of standard unit tests to verify tool functionality in isolated environments without external dependencies, maintain consistency with Langchain standards, and ensure compatibility with the broader Langchain ecosystem. The rule is particularly important for ensuring proper unit test coverage during the development process and when preparing packages for distribution.
+globs:
+alwaysApply: false
+---
+
+# Langchain Tools Unit Testing Standards
+
+## Critical Rules
+
+- Always implement unit tests for any Langchain tool implementation
+- Place unit tests in the `tests/unit_tests/` directory
+- Name test files following the pattern `test_tools.py` to ensure proper test discovery
+- Unit test classes must subclass `ToolUnitTests` from `langchain_tests.unit_tests`
+- Always implement the required properties:
+  - `tool_constructor` - return the tool class to be tested or an instantiated tool
+  - `tool_constructor_params` - return a dictionary of constructor parameters (if using a class constructor)
+  - `tool_invoke_params_example` - return a dictionary of valid parameters for the tool's `invoke` method
+- If testing an instantiated tool, pass it to `tool_constructor` and do not override `tool_constructor_params`
+- Pin the version of `langchain-tests` in your dependencies to avoid unexpected CI/CD pipeline breaks
+- Run unit tests with network access disabled using `--disable-socket --allow-unix-socket` flags
+- Run unit tests with `--asyncio-mode=auto` flag to properly handle async tests
+- Import your tool class using the proper package path in test files
+- Use test parameters that don't require actual API credentials for unit tests
+- Ensure tool_invoke_params_example is NOT a ToolCall dict with "name", "id", and "args" keys
+- Ensure all standard unit tests pass before submitting your integration
+
+## Unit Test Method Troubleshooting
+
+- The standard tests verify that your tool properly implements:
+  - The correct interface and required methods
+  - Proper initialization with the provided parameters
+  - Proper invocation with the example parameters
+  - Consistent schema validation
+  - Proper error handling
+- If tests fail, check that your tool implementation follows Langchain's tool standards
+- Ensure your tool returns expected output types and formats
+
+## Examples
+
+<example>
+```python
+"""Test tool unit tests."""
+
+from typing import Type
+from langchain_parrot_link.tools import ParrotTool
+from langchain_tests.unit_tests import ToolUnitTests
+
+class TestParrotMultiplyToolUnit(ToolUnitTests):
+    @property
+    def tool_constructor(self) -> Type[ParrotTool]:
+        return ParrotTool
+
+    @property
+    def tool_constructor_params(self) -> dict:
+        # If your tool constructor requires init args like:
+        # def __init__(self, some_arg: int):
+        # you would return those here as a dictionary, e.g. {"some_arg": 42}
+        return {}
+
+    @property
+    def tool_invoke_params_example(self) -> dict:
+        # Should represent the args of a valid tool call
+        # This must NOT be a ToolCall dict like {"name": ..., "id": ..., "args": ...}
+        return {"a": 2, "b": 3}
+```
+
+Command for running unit tests:
+```bash
+# run unit tests without network access
+uv run pytest --disable-socket --allow-unix-socket --asyncio-mode=auto tests/unit_tests
+```
+</example>
+
+<example type="invalid">
+```python
+# Missing proper import of base test class
+from langchain_parrot_link.tools import ParrotTool
+
+# Not inheriting from the correct base class
+class TestParrotTool:
+    def test_invoke(self):
+        tool = ParrotTool()
+        result = tool.invoke({"a": 2, "b": 3})
+        assert result == 6
+```
+
+```python
+# Wrong location - tool tests should be in dedicated unit test directory
+# tests/test_tools.py instead of tests/unit_tests/test_tools.py
+
+from typing import Type
+from langchain_parrot_link.tools import ParrotTool
+from langchain_tests.unit_tests import ToolUnitTests
+
+class TestParrotToolUnit(ToolUnitTests):
+    # Missing required properties
+    # @property def tool_constructor()
+    # @property def tool_constructor_params()
+    # @property def tool_invoke_params_example()
+
+    def test_custom(self):
+        # Custom tests without implementing standard test configuration
+        pass
+```
+
+# Using the wrong format for tool_invoke_params_example
+from typing import Type
+from langchain_parrot_link.tools import ParrotTool
+from langchain_tests.unit_tests import ToolUnitTests
+
+class TestParrotMultiplyToolUnit(ToolUnitTests):
+    @property
+    def tool_constructor(self) -> Type[ParrotTool]:
+        return ParrotTool
+
+    @property
+    def tool_constructor_params(self) -> dict:
+        return {}
+
+    @property
+    def tool_invoke_params_example(self) -> dict:
+        # WRONG: This is a ToolCall format, not the direct args
+        return {
+            "name": "multiply",
+            "id": "call_123",
+            "args": {"a": 2, "b": 3}
+        }
+</example>
+
+use firecrawl or perplexity to look up https://python.langchain.com/api_reference/standard_tests/unit_tests/langchain_tests.unit_tests.tools.ToolsUnitTests.html for more info if you need it.

@@ -6,6 +6,7 @@ This script checks if the default port is in use, and either:
 1. Kills existing MkDocs processes using that port, or
 2. Uses an alternative port
 """
+from __future__ import annotations
 
 import argparse
 import os

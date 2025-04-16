@@ -22,6 +22,7 @@ import "justfiles/audit.just"
 import "justfiles/llmstxt.just"
 import "justfiles/vectorstore.just"
 import "justfiles/open.just"
+import "justfiles/test.just"
 
 # display help information
 default:

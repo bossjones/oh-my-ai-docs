@@ -4,7 +4,9 @@ Macro definitions for https://mkdocs-macros-plugin.readthedocs.io/
 This module provides macro functions for use with the mkdocs-macros-plugin.
 It enables dynamic content generation and template rendering in MkDocs pages.
 """
+
 # pyright: reportUnusedFunction=false
+from __future__ import annotations
 
 import os
 from collections.abc import Callable

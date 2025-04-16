@@ -6,6 +6,7 @@ Automatically generates and updates changelog entries based on Git commit histor
 and conventional commits format. It compares commits between branches, parses
 commit messages, and updates the changelog accordingly.
 """
+from __future__ import annotations
 
 import argparse
 import datetime

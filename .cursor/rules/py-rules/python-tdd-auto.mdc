@@ -1,9 +1,10 @@
 ---
 description: "This rule governs the Test-Driven Development (TDD) workflow. It should be applied automatically whenever: (1) Implementing new features, (2) Fixing bugs, (3) Refactoring code, or (4) Working on story implementations. This ensures we follow proper TDD practices with continuous test feedback."
-globs: src/**/*.py, tests/**/*.py
-alwaysApply: true
+globs:
+alwaysApply: false
 ---
 
+# src/**/*.py, tests/**/*.py
 # Python TDD Development Loop Standards
 
 ## Critical Rules

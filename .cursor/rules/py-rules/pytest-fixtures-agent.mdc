@@ -1,9 +1,10 @@
 ---
 description: "This rule governs pytest fixture management and organization. It should be applied whenever: (1) Creating new test files or fixtures, (2) Modifying existing fixtures, (3) Using fixtures in tests, or (4) Reviewing test code. This ensures consistent fixture management, prevents duplication, and maintains clear test organization."
-globs: tests/**/*.py
+globs:
 alwaysApply: false
 ---
 
+# globs: tests/**/*.py
 # Pytest Fixture Management Standards
 
 ## Critical Rules
@@ -48,6 +49,33 @@ alwaysApply: false
   * Close connections and files
   * Reset mocked objects
   * Clean up temporary data
+
+### Fixture Naming Conventions
+
+- ALWAYS use descriptive prefixes to avoid collisions:
+  - `fixture_` for general fixtures, e.g., `fixture_database_connection`
+  - `mock_` for mock objects, e.g., `mock_api_response`
+  - `test_` for test-related fixtures, e.g., `test_user_data`
+
+- ALWAYS use namespacing with underscores for clarity:
+  - `app_config_test`
+  - `db_connection_test`
+  - `api_client_test`
+
+- ALWAYS use verb phrases for fixtures that perform actions:
+  - `setup_database`
+  - `create_test_user`
+  - `initialize_environment`
+
+- ALWAYS use domain-specific prefixes for clarity:
+  - `discord_mock_client`
+  - `ai_mock_response`
+  - `env_mock_vars`
+
+- ALWAYS indicate scope for temporary resources when helpful:
+  - `temp_file_function` for function-scoped
+  - `temp_db_module` for module-scoped
+  - `temp_config_session` for session-scoped
 
 ## Examples
 
@@ -110,6 +138,24 @@ async def client(settings: Settings) -> AsyncGenerator[Client, None]:
     yield client
     await client.close()
 ```
+
+# Good - Descriptive and Scoped Naming
+```python
+@pytest.fixture
+def fixture_database_connection():
+    # setup code
+    pass
+
+@pytest.fixture
+def mock_api_response():
+    # setup code
+    pass
+
+@pytest.fixture
+def setup_database():
+    # setup code
+    pass
+```
 </example>
 
 <example type="invalid">
@@ -157,5 +203,23 @@ def test_feature():
 def test_another_feature():
     settings = Settings(debug=True)  # Should use fixture
     client = Client(settings)  # Should use fixture
+```
+
+# Bad - Non-descriptive or Colliding Names
+```python
+@pytest.fixture
+def db():  # BAD: Too generic, potential collision
+    # setup code
+    pass
+
+@pytest.fixture
+def response(): # BAD: Too generic
+    # setup code
+    pass
+
+@pytest.fixture
+def setup(): # BAD: Too generic, doesn't describe what is set up
+    # setup code
+    pass
 ```
 </example>

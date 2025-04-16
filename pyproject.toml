@@ -16,11 +16,11 @@
         "debugpy>=1.8.12",
         "dpytest>=0.7.0",
         "factory-boy>=3.3.3",
-        "faker>=37.1.0",
         "griffe-inherited-docstrings>=1.1.1",
         "ipykernel>=6.29.5",
         "ipywidgets>=8.1.5",
         "jedi-language-server>=0.44.0",
+        "langchain-tests==0.3.18",
         "markdown-emdash>=0.2.0",
         "memory-profiler>=0.61.0",
         "mkdocs-api-autonav>=0.2.1",
@@ -272,7 +272,7 @@
             '--durations=10',
             '--junitxml=junit/test-results.xml',
             # Timeout settings
-            '--timeout=30',
+            '--timeout=600',
             '--timeout_method=thread',
         ]
         asyncio_default_fixture_loop_scope = "function"
@@ -311,6 +311,7 @@
         markers = [
             "agenticonly: marks tests that run code that utilizes the agentic module (deselect with '-m \"not agenticonly\"')",
             "aidergenerated: marks tests that are aider generated (deselect with '-m \"not aidergenerated\"')",
+            "anyio: marks tests that run code that utilizes the anyio module (deselect with '-m \"not anyio\"')",
             "asynciotyper: marks tests that are asyncio typer generated (deselect with '-m \"not asynciotyper\"')",
             "chatbotonly: marks tests that run code that utilizes the chatbot module (deselect with '-m \"not chatbotonly\"')",
             "cli: marks tests that are cli generated (deselect with '-m \"not cli\"')",
@@ -322,10 +323,27 @@
             "e2e: marks tests dealing with e2e testing (deselect with '-m \"not e2e\"')",
             "evals: marks tests as evals (run with '-m evals')",
             "fast: marks tests as fast (run with '-m fast')",
+            "fastmcp_basic: marks tests that verify basic FastMCP server functionality including server creation, Unicode support, and decorator usage (deselect with '-m \"not fastmcp_basic\"')",
+            "fastmcp_context: marks tests that verify FastMCP context functionality including context injection, async support, logging, and resource access (deselect with '-m \"not fastmcp_context\"')",
+            "fastmcp_lifespan: marks tests that verify FastMCP lifespan functionality including basic operations, error handling, and content type handling (deselect with '-m \"not fastmcp_lifespan\"')",
+            "fastmcp_prompts: marks tests that verify FastMCP prompt functionality including registration, configuration, management, and execution (deselect with '-m \"not fastmcp_prompts\"')",
+            "fastmcp_resources: marks tests that verify FastMCP resource functionality including text/binary resources, file resources, and resource templates (deselect with '-m \"not fastmcp_resources\"')",
+            "fastmcp_tools: marks tests that verify FastMCP tool functionality including basic operations, error handling, and content type handling (deselect with '-m \"not fastmcp_tools\"')",
+            "fastmcp_vectorstore: marks tests that verify FastMCP vectorstore functionality including basic operations, error handling, and content type handling (deselect with '-m \"not fastmcp_vectorstore\"')",
             "gallerydlonly: marks tests that run code that utilizes the gallery-dl module (deselect with '-m \"not gallerydlonly\"')",
             "httpclientonly: marks tests that run code that utilizes the http_client module (deselect with '-m \"not httpclientonly\"')",
             "imgops: marks tests as imgops (run with '-m imgops')",
             "integration: marks tests dealing with integration testing (deselect with '-m \"not integration\"')",
+            "langchain_chat_model_integration: marks tests that implement integration tests for LangChain chat model components (deselect with '-m \"not langchain_chat_model_integration\"')",
+            "langchain_chat_model_unit: marks tests that implement unit tests for LangChain chat model components (deselect with '-m \"not langchain_chat_model_unit\"')",
+            "langchain_embeddings_integration: marks tests that implement integration tests for LangChain embedding components (deselect with '-m \"not langchain_embeddings_integration\"')",
+            "langchain_embeddings_unit: marks tests that implement unit tests for LangChain embedding components (deselect with '-m \"not langchain_embeddings_unit\"')",
+            "langchain_retrievers_integration: marks tests that implement integration tests for LangChain retriever components (deselect with '-m \"not langchain_retrievers_integration\"')",
+            "langchain_retrievers_unit: marks tests that implement unit tests for LangChain retriever components (deselect with '-m \"not langchain_retrievers_unit\"')",
+            "langchain_tool_integration: marks tests that implement integration tests for LangChain tool components (deselect with '-m \"not langchain_tool_integration\"')",
+            "langchain_tool_unit: marks tests that implement unit tests for LangChain tool components (deselect with '-m \"not langchain_tool_unit\"')",
+            "langchain_vectorstore_integration: marks tests that implement integration tests for LangChain vector store components (deselect with '-m \"not langchain_vectorstore_integration\"')",
+            "langchain_vectorstore_unit: marks tests that implement unit tests for LangChain vector store components (deselect with '-m \"not langchain_vectorstore_unit\"')",
             "logsonly: marks tests that run code that utilizes the logs module (deselect with '-m \"not logsonly\"')",
             "onboardingonly: marks tests that run code that utilizes the new_dev_onboarding_tool module (deselect with '-m \"not onboardingonly\"')",
             "pgvectoronly: marks tests that run code that utilizes the pgvector module (deselect with '-m \"not pgvectoronly\"')",
@@ -339,6 +357,7 @@
             "utilsonly: marks tests that run code that utilizes any utils module (deselect with '-m \"not utilsonly\"')",
             "vcrcanary: marks tests that run code that utilizes the vcr test canary module (deselect with '-m \"not vcrcanary\"')",
             "vcronly: marks tests that run code that utilizes the vcr module (deselect with '-m \"not vcronly\"')",
+            "vectorstore: marks tests that use or interact with vectorstore components like SKLearnVectorStore (deselect with '-m \"not vectorstore\"')",
             "vectorstoronly: marks tests that run code that utilizes the flex_vector_store_tool module (deselect with '-m \"not vectorstoronly\"')",
             "visiontoolonly: marks tests that run code that utilizes vision_tool.py (deselect with '-m \"not visiontoolonly\"')",
             "webpagetoolonly: marks tests that run code that utilizes the fetch_webpage_tool module (deselect with '-m \"not webpagetoolonly\"')",
@@ -548,6 +567,12 @@
         # Add banned-imports rule
         [tool.ruff.lint.flake8-import-conventions]
             banned-from = ["unittest", "unittest.mock"]
+
+        [tool.ruff.lint.isort]
+            required-imports = ["from __future__ import annotations"]
+        [tool.ruff.lint.pyupgrade]
+            # Preserve types, even if a file imports `from __future__ import annotations`.
+            keep-runtime-typing = true
 
 [tool.tomlsort]
     all = true

@@ -10,6 +10,7 @@ This script checks for:
 4. Proper formatting of fields
 5. Absence of quotes around glob patterns
 """
+from __future__ import annotations
 
 import argparse
 import os

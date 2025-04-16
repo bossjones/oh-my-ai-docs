@@ -1,0 +1,1267 @@
+Document 1: https://dpytest.readthedocs.io/en/latest/index.html
+--------------------------------------------------------------------------------
+Welcome to the dpytest documentation! — dpytest 0.7.0 documentation
+
+Welcome to the dpytest documentation!¶
+The dpytest library is designed to make testing of discord bots easy and painless.
+The library is currently in its infancy, and only supports a subset of the discord API.
+Also, the API is not yet finalized, and may change somewhat rapidly. Breaking changes can be
+expected until the library hits version 1.0.
+
+Dpytest Tutorials
+Getting Started
+Using Pytest
+
+API Reference
+Backend
+Callbacks
+Factories
+Runner
+State
+Utils
+Verify
+Factories
+
+Indices and tables¶
+
+Index
+Module Index
+Search Page
+
+dpytest
+
+Navigation
+
+Dpytest Tutorials
+API Reference
+
+Related Topics
+
+Documentation overview
+Next: Dpytest Tutorials
+
+Quick search
+
+      ©2020, CraftSpider.
+
+      |
+      Powered by Sphinx 7.0.1
+      & Alabaster 0.7.13
+
+      |
+      Page source
+
+================================================================================
+
+Document 2: https://dpytest.readthedocs.io/en/latest/tutorials/index.html
+--------------------------------------------------------------------------------
+Dpytest Tutorials — dpytest 0.7.0 documentation
+
+Dpytest Tutorials¶
+Here will be found tutorials for using dpytest practically, starting with the fundamentals
+and building up to more advanced usage. For now, there isn't much yet, but expect this to change
+as the library grows.
+
+Getting Started
+Installing Dpytest
+Using Dpytest
+
+Using Pytest
+Starting with Pytest
+What is conftest.py?
+Troubleshooting
+
+dpytest
+
+Navigation
+
+Dpytest Tutorials
+Getting Started
+Using Pytest
+
+API Reference
+
+Related Topics
+
+Documentation overview
+Previous: Welcome to the dpytest documentation!
+Next: Getting Started
+
+Quick search
+
+      ©2020, CraftSpider.
+
+      |
+      Powered by Sphinx 7.0.1
+      & Alabaster 0.7.13
+
+      |
+      Page source
+
+================================================================================
+
+Document 3: https://dpytest.readthedocs.io/en/latest/modules/index.html
+--------------------------------------------------------------------------------
+API Reference — dpytest 0.7.0 documentation
+
+API ReferenceÂ¶
+The dpytest API is split among several modules, each of which is documented here
+
+Backend
+BackendState
+FakeRequest
+FakeHttp
+get_state()
+make_guild()
+update_guild()
+make_role()
+update_role()
+delete_role()
+make_text_channel()
+make_category_channel()
+make_voice_channel()
+delete_channel()
+update_text_channel()
+make_user()
+make_member()
+update_member()
+delete_member()
+make_message()
+edit_message()
+find_user_mentions()
+find_role_mentions()
+find_channel_mentions()
+delete_message()
+make_attachment()
+add_reaction()
+remove_reaction()
+clear_reactions()
+pin_message()
+unpin_message()
+configure()
+
+Callbacks
+dispatch_event()
+set_callback()
+get_callback()
+remove_callback()
+
+Factories
+make_id()
+make_user_dict()
+dict_from_user()
+make_member_dict()
+dict_from_member()
+make_role_dict()
+dict_from_role()
+make_channel_dict()
+make_text_channel_dict()
+make_category_channel_dict()
+make_dm_channel_dict()
+make_voice_channel_dict()
+dict_from_overwrite()
+dict_from_channel()
+make_message_dict()
+dict_from_message()
+make_attachment_dict()
+dict_from_attachment()
+make_emoji_dict()
+dict_from_emoji()
+make_guild_dict()
+dict_from_guild()
+
+Runner
+RunnerConfig
+require_config()
+run_all_events()
+finish_on_command_error()
+get_message()
+get_embed()
+empty_queue()
+message()
+set_permission_overrides()
+add_role()
+remove_role()
+add_reaction()
+remove_reaction()
+member_join()
+get_config()
+configure()
+
+State
+FakeState
+
+Utils
+embed_eq()
+activity_eq()
+embed_proxy_eq()
+PeekableQueue
+
+Verify
+VerifyMessage
+VerifyActivity
+Verify
+verify()
+
+Factories
+FakeWebSocket
+
+dpytest
+
+Navigation
+
+Dpytest Tutorials
+API Reference
+Backend
+Callbacks
+Factories
+Runner
+State
+Utils
+Verify
+Factories
+
+Related Topics
+
+Documentation overview
+Previous: Using Pytest
+Next: Backend
+
+Quick search
+
+      ©2020, CraftSpider.
+
+      |
+      Powered by Sphinx 7.0.1
+      & Alabaster 0.7.13
+
+      |
+      Page source
+
+================================================================================
+
+Document 4: https://dpytest.readthedocs.io/en/latest/modules/backend.html
+--------------------------------------------------------------------------------
+Backend — dpytest 0.7.0 documentation
+
+Backend¶
+Module for 'server-side' state during testing. This module should contain
+methods for altering said server-side state, which then are responsible for triggering
+a parse_* call in the configured client state to inform the bot of the change.
+This setup matches discord's actual setup, where an HTTP call triggers a change on the server,
+which is then sent back to the bot as an event which is parsed and dispatched.
+
+class BackendState(messages: Dict[int, List[Dict[str, str | int | bool | Dict[str, JsonVal] | List[JsonVal]]]], state: FakeState)¶
+The dpytest backend, with all the state it needs to hold to be able to pretend to be
+discord. Generally only used internally, but exposed through get_state()
+
+messages: Dict[int, List[Dict[str, str | int | bool | Dict[str, JsonVal] | List[JsonVal]]]]¶
+Alias for field number 0
+
+state: FakeState¶
+Alias for field number 1
+
+__slots__ = ()¶
+
+class FakeRequest(status: int, reason: str)¶
+A fake web response, for use with discord HTTPExceptions
+
+status: int¶
+Alias for field number 0
+
+reason: str¶
+Alias for field number 1
+
+__slots__ = ()¶
+
+class FakeHttp(loop: AbstractEventLoop | None = None)¶
+A mock implementation of an HTTPClient. Instead of actually sending requests to discord, it triggers
+a runner callback and calls the dpytest backend to update any necessary state and trigger any necessary
+fake messages to the client.
+
+fileno: ClassVar[int] = 0¶
+
+__init__(loop: AbstractEventLoop | None = None) → None¶
+
+state: FakeState¶
+
+async request(*args: Any, **kwargs: Any) → NoReturn¶
+
+Overloaded to raise a NotImplemented error informing the user that the requested operation
+isn't yet supported by dpytest. To fix this, the method call that triggered this error should be
+overloaded below to instead trigger a callback and call the appropriate backend function.
+
+Parameters:
+
+args – Arguments provided to the request
+kwargs – Keyword arguments provided to the request
+
+async create_channel(guild_id: int, channel_type: discord.ChannelType, *, reason: str | None = None, **options: Any) → Dict[str, str | int | bool | Dict[str, JsonVal] | List[JsonVal]]¶
+
+async delete_channel(channel_id: int, *, reason: str | None = None) → None¶
+
+async get_channel(channel_id: int) → Dict[str, str | int | bool | Dict[str, JsonVal] | List[JsonVal]]¶
+
+async start_private_message(user_id: int) → Dict[str, str | int | bool | Dict[str, JsonVal] | List[JsonVal]]¶
+
+async send_message(channel_id: int, *, params: MultipartParameters) → Dict[str, str | int | bool | Dict[str, JsonVal] | List[JsonVal]]¶
+
+async send_typing(channel_id: int) → None¶
+
+async delete_message(channel_id: int, message_id: int, *, reason: str | None = None) → None¶
+
+async edit_message(channel_id: int, message_id: int, **fields: MultipartParameters) → Dict[str, str | int | bool | Dict[str, JsonVal] | List[JsonVal]]¶
+
+async add_reaction(channel_id: int, message_id: int, emoji: str) → None¶
+
+async remove_reaction(channel_id: int, message_id: int, emoji: str, member_id: int) → None¶
+
+async remove_own_reaction(channel_id: int, message_id: int, emoji: str) → None¶
+
+async clear_reactions(channel_id: int, message_id: int) → None¶
+
+async get_message(channel_id: int, message_id: int) → Dict[str, str | int | bool | Dict[str, JsonVal] | List[JsonVal]]¶
+
+async logs_from(channel_id: int, limit: int, before: int | None = None, after: int | None = None, around: int | None = None) → List[Dict[str, str | int | bool | Dict[str, JsonVal] | List[JsonVal]]]¶
+
+async kick(user_id: int, guild_id: int, reason: str | None = None) → None¶
+
+async ban(user_id: int, guild_id: int, delete_message_days: int = 1, reason: str | None = None) → None¶
+
+async change_my_nickname(guild_id: int, nickname: str, *, reason: str | None = None) → Dict[str, str | int | bool | Dict[str, JsonVal] | List[JsonVal]]¶
+
+async edit_member(guild_id: int, user_id: int, *, reason: str | None = None, **fields: Any) → Dict[str, str | int | bool | Dict[str, JsonVal] | List[JsonVal]]¶
+
+async get_member(guild_id: int, member_id: int) → Dict[str, str | int | bool | Dict[str, JsonVal] | List[JsonVal]]¶
+
+async edit_role(guild_id: int, role_id: int, *, reason: str | None = None, **fields: Any) → Dict[str, str | int | bool | Dict[str, JsonVal] | List[JsonVal]]¶
+
+async delete_role(guild_id: int, role_id: int, *, reason: str | None = None) → None¶
+
+async create_role(guild_id: int, *, reason: str | None = None, **fields: Any) → Dict[str, str | int | bool | Dict[str, JsonVal] | List[JsonVal]]¶
+
+async move_role_position(guild_id: int, positions: List[Dict[str, str | int | bool | Dict[str, JsonVal] | List[JsonVal]]], *, reason: str | None = None) → None¶
+
+async add_role(guild_id: int, user_id: int, role_id: int, *, reason: str | None = None) → None¶
+
+async remove_role(guild_id: int, user_id: int, role_id: int, *, reason: str | None = None) → None¶
+
+async application_info() → Dict[str, str | int | bool | Dict[str, JsonVal] | List[JsonVal]]¶
+
+async delete_channel_permissions(channel_id: int, target_id: int, *, reason: str | None = None) → None¶
+
+async edit_channel_permissions(channel_id: int, target_id: int, allow_value: int, deny_value: int, perm_type: str, *, reason: str | None = None) → None¶
+
+async get_from_cdn(url: str) → bytes¶
+
+async get_user(user_id: int) → Dict[str, str | int | bool | Dict[str, JsonVal] | List[JsonVal]]¶
+
+async pin_message(channel_id: int, message_id: int, reason: str | None = None) → None¶
+
+async unpin_message(channel_id: int, message_id: int, reason: str | None = None) → None¶
+
+async get_guilds(limit: int, before: int | None = None, after: int | None = None)¶
+
+async get_guild(guild_id: int) → Dict[str, str | int | bool | Dict[str, JsonVal] | List[JsonVal]]¶
+
+get_state() → FakeState¶
+
+Get the current backend state, or raise an error if it hasn't been configured
+
+Returns:
+Current backend state
+
+make_guild(name: str, members: List[Member] | None = None, channels: List[TextChannel | CategoryChannel | GuildChannel | PrivateChannel] | None = None, roles: List[Role] | None = None, owner: bool = False, id_num: int = -1) → Guild¶
+
+Add a new guild to the backend, triggering any relevant callbacks on the configured client
+
+Parameters:
+
+name – Name of the guild
+members – Existing members of the guild or None
+channels – Existing channels in the guild or None
+roles – Existing roles in the guild or None
+owner – Whether the configured client owns the guild, default is false
+id_num – ID of the guild, or nothing to auto-generate
+
+Returns:
+Newly created guild
+
+update_guild(guild: Guild, roles: List[Role] | None = None) → Guild¶
+
+Update an existing guild with new information, triggers a guild update but not any individual item
+create/edit calls
+
+Parameters:
+
+guild – Guild to be updated
+roles – New role list for the guild
+
+Returns:
+Updated guild object
+
+make_role(name: str, guild: Guild, id_num: int = -1, colour: int = 0, color: int | None = None, permissions: int = 104324161, hoist: bool = False, mentionable: bool = False) → Role¶
+
+Add a new role to the backend, triggering any relevant callbacks on the configured client
+
+Parameters:
+
+name – Name of the new role
+guild – Guild role is being added to
+id_num – ID of the new role, or nothing to auto-generate
+colour – Color of the new role
+color – Alias for above
+permissions – Permissions for the new role
+hoist – Whether the new role is hoisted
+mentionable – Whether the new role is mentionable
+
+Returns:
+Newly created role
+
+update_role(role: Role, colour: int | None = None, color: int | None = None, permissions: int | None = None, hoist: bool | None = None, mentionable: bool | None = None, name: str | None = None) → Role¶
+
+Update an existing role with new data, triggering a role update event.
+Any value not passed/passed None will not update the existing value.
+
+Parameters:
+
+role – Role to update
+colour – New color for the role
+color – Alias for above
+permissions – New permissions
+hoist – New hoist value
+mentionable – New mention value
+name – New name for the role
+
+Returns:
+Role that was updated
+
+delete_role(role: Role) → None¶
+
+Remove a role from the backend, deleting it from the guild
+
+Parameters:
+role – Role to delete
+
+make_text_channel(name: str, guild: Guild, position: int = -1, id_num: int = -1, permission_overwrites: Dict[str, str | int | bool | Dict[str, JsonVal] | List[JsonVal]] | None = None, parent_id: int | None = None) → TextChannel¶
+
+make_category_channel(name: str, guild: Guild, position: int = -1, id_num: int = -1, permission_overwrites: Dict[str, str | int | bool | Dict[str, JsonVal] | List[JsonVal]] | None = None) → CategoryChannel¶
+
+make_voice_channel(name: str, guild: Guild, position: int = -1, id_num: int = -1, permission_overwrites: Dict[str, str | int | bool | Dict[str, JsonVal] | List[JsonVal]] | None = None, parent_id: int | None = None, bitrate: int = 192, user_limit: int = 0) → VoiceChannel¶
+
+delete_channel(channel: TextChannel | CategoryChannel | GuildChannel | PrivateChannel) → None¶
+
+update_text_channel(channel: ~discord.channel.TextChannel, target: ~discord.user.User | ~discord.role.Role, override: ~discord.permissions.PermissionOverwrite | None = <object object>) → None¶
+
+make_user(username: str, discrim: str | int, avatar: str | None = None, id_num: int = -1) → User¶
+
+make_member(user: BaseUser | User, guild: Guild, nick: str | None = None, roles: List[Role] | None = None) → Member¶
+
+update_member(member: Member, nick: str | None = None, roles: List[Role] | None = None) → Member¶
+
+delete_member(member: Member) → None¶
+
+make_message(content: str, author: BaseUser | User, channel: TextChannel | CategoryChannel | GuildChannel | PrivateChannel, tts: bool = False, embeds: List[Embed] | None = None, attachments: List[Attachment] | None = None, nonce: int | None = None, id_num: int = -1) → Message¶
+
+edit_message(message: Message, **fields: MultipartParameters) → Dict[str, str | int | bool | Dict[str, JsonVal] | List[JsonVal]]¶
+
+find_user_mentions(content: str | None, guild: Guild | None) → List[Member]¶
+
+find_role_mentions(content: str | None, guild: Guild | None) → List[int]¶
+
+find_channel_mentions(content: str | None, guild: Guild | None) → List[TextChannel | CategoryChannel | GuildChannel | PrivateChannel]¶
+
+delete_message(message: Message) → None¶
+
+make_attachment(filename: Path, name: str | None = None, id_num: int = -1) → Attachment¶
+
+add_reaction(message: Message, user: BaseUser | User, emoji: str) → None¶
+
+remove_reaction(message: Message, user: BaseUser, emoji: str) → None¶
+
+clear_reactions(message: Message)¶
+
+pin_message(channel_id: int, message_id: int)¶
+
+unpin_message(channel_id: int, message_id: int)¶
+
+configure(client: Client) → None¶
+
+configure(client: Client | None, *, use_dummy: bool = False) → None
+
+Configure the backend, optionally with the provided client
+
+Parameters:
+
+client – Client to use, or None
+use_dummy – Whether to use a dummy if client param is None, or error
+
+dpytest
+
+Navigation
+
+Dpytest Tutorials
+API Reference
+Backend
+Callbacks
+Factories
+Runner
+State
+Utils
+Verify
+Factories
+
+Related Topics
+
+Documentation overview
+API Reference
+Previous: API Reference
+Next: Callbacks
+
+Quick search
+
+      ©2020, CraftSpider.
+
+      |
+      Powered by Sphinx 7.0.1
+      & Alabaster 0.7.13
+
+      |
+      Page source
+
+================================================================================
+
+Document 5: https://dpytest.readthedocs.io/en/latest/modules/callbacks.html
+--------------------------------------------------------------------------------
+Callbacks — dpytest 0.7.0 documentation
+
+Callbacks¶
+Module containing registered callbacks for various events. These events are how various parts of discord.py
+can communicate with the frontend runner or a user's custom runner setup. These callbacks should not
+be used to trigger backend changes, that is the responsibility of the library internals.
+
+async dispatch_event(event: str, *args: Any, **kwargs: Any) → None¶
+
+Dispatch an event to a set handler, if one exists. Will ignore handler errors,
+just print a log
+
+Parameters:
+
+event – Name of the event to dispatch
+args – Arguments to the callback
+kwargs – Keyword arguments to the callback
+
+set_callback(cb: Callable[[...], Coroutine[None, None, None]], event: str) → None¶
+
+Set the callback to use for a specific event
+
+Parameters:
+
+cb – Callback to use
+event – Name of the event to register for
+
+get_callback(event: str) → Callable[[...], Coroutine[None, None, None]]¶
+
+Get the current callback for an event, or raise an exception if one isn't set
+
+Parameters:
+event – Event to get callback for
+
+Returns:
+Callback for event, if one is set
+
+remove_callback(event: str) → Callable[[...], Coroutine[None, None, None]] | None¶
+
+Remove the callback set for an event, returning it, or None if one isn't set
+
+Parameters:
+event – Event to remove callback for
+
+Returns:
+Callback that was previously set or None
+
+dpytest
+
+Navigation
+
+Dpytest Tutorials
+API Reference
+Backend
+Callbacks
+Factories
+Runner
+State
+Utils
+Verify
+Factories
+
+Related Topics
+
+Documentation overview
+API Reference
+Previous: Backend
+Next: Factories
+
+Quick search
+
+      ©2020, CraftSpider.
+
+      |
+      Powered by Sphinx 7.0.1
+      & Alabaster 0.7.13
+
+      |
+      Page source
+
+================================================================================
+
+Document 6: https://dpytest.readthedocs.io/en/latest/modules/factories.html
+--------------------------------------------------------------------------------
+Factories — dpytest 0.7.0 documentation
+
+Factories¶
+Module for (mostly) stateless creation/destructuring of discord.py objects. Primarily a utility
+for the rest of the library, which often needs to convert between objects and JSON at various stages.
+
+make_id() → int¶
+
+make_user_dict(username: str, discrim: str | int, avatar: str | None, id_num: int = -1, flags: int = 0, *, bot: bool = ..., mfa_enabled: bool = ..., locale: str = ..., verified: bool = ..., email: str = ..., premium_type: int = ...) → _types.JsonDict¶
+
+dict_from_user(user: User) → Dict[str, str | int | bool | Dict[str, JsonVal] | List[JsonVal]]¶
+
+make_member_dict(guild: Guild, user: User, roles: List[int], joined: int = 0, deaf: bool = False, mute: bool = False, voice: bool = False, flags: int = 0, *, nick: str = ...) → _types.JsonDict¶
+
+dict_from_member(member: Member) → Dict[str, str | int | bool | Dict[str, JsonVal] | List[JsonVal]]¶
+
+make_role_dict(name: str, id_num: int = -1, colour: int = 0, color: int | None = None, hoist: bool = False, position: int = -1, permissions: int = 104324161, managed: bool = False, mentionable: bool = False) → Dict[str, str | int | bool | Dict[str, JsonVal] | List[JsonVal]]¶
+
+dict_from_role(role: Role) → Dict[str, str | int | bool | Dict[str, JsonVal] | List[JsonVal]]¶
+
+make_channel_dict(ctype: int, id_num: int = -1, *, guild_id: int = ..., position: int = ..., permission_overwrites: _types.JsonDict = ..., name: str = ..., topic: str | None = ..., nsfw: bool = ..., last_message_id: str | None = ..., bitrate: int = ..., user_limit: int = ..., rate_limit_per_user: int = ..., recipients: List[_types.JsonDict] = ..., icon: str | None = ..., owner_id: int = ..., application_id: int = ..., parent_id: int | None = ..., last_pin_timestamp: int = ...) → _types.JsonDict¶
+
+make_text_channel_dict(name: str, id_num: int = -1, guild_id: int = ..., position: int = ..., permission_overwrites: _types.JsonDict = ..., topic: str | None = ..., nsfw: bool = ..., last_message_id: int | None = ..., rate_limit_per_user: int = ..., parent_id: int | None = ..., last_pin_timestamp: int = ...) → _types.JsonDict¶
+
+make_category_channel_dict(name: str, id_num: int = -1, **kwargs: Any) → Dict[str, str | int | bool | Dict[str, JsonVal] | List[JsonVal]]¶
+
+make_dm_channel_dict(user: User, id_num: int = -1, **kwargs: Any) → Dict[str, str | int | bool | Dict[str, JsonVal] | List[JsonVal]]¶
+
+make_voice_channel_dict(name: str, id_num: int = -1, **kwargs: Any) → Dict[str, str | int | bool | Dict[str, JsonVal] | List[JsonVal]]¶
+
+dict_from_overwrite(target: Member | Role, overwrite: PermissionOverwrite) → Dict[str, str | int | bool | Dict[str, JsonVal] | List[JsonVal]]¶
+
+dict_from_channel(channel: TextChannel | CategoryChannel | GuildChannel | PrivateChannel) → Dict[str, str | int | bool | Dict[str, JsonVal] | List[JsonVal]]¶
+
+make_message_dict(channel: TextChannel | CategoryChannel | GuildChannel | PrivateChannel, author: BaseUser, id_num: int = -1, content: str = None, timestamp: int = None, edited_timestamp: int | None = None, tts: bool = False, mention_everyone: bool = False, mentions: List[User | Member] = None, mention_roles: List[int] = None, mention_channels: List[TextChannel | CategoryChannel | GuildChannel | PrivateChannel] = None, attachments: List[Attachment] = None, embeds: List[Embed] = None, pinned: bool = False, type: int = 0, *, guild_id: int = ..., member: Member = ..., reactions: List[Reaction] = ..., nonce: int | None = ..., webhook_id: int = ..., activity: Activity = ..., application: _types.JsonDict = ...) → _types.JsonDict¶
+
+dict_from_message(message: Message) → Dict[str, str | int | bool | Dict[str, JsonVal] | List[JsonVal]]¶
+
+make_attachment_dict(filename: str, size: int, url: str, proxy_url: str, id_num: int = -1, height: int | None = None, width: int | None = None, content_type: str | None = None) → Dict[str, str | int | bool | Dict[str, JsonVal] | List[JsonVal]]¶
+
+dict_from_attachment(attachment: Attachment) → Dict[str, str | int | bool | Dict[str, JsonVal] | List[JsonVal]]¶
+
+make_emoji_dict()¶
+
+dict_from_emoji(emoji)¶
+
+make_guild_dict(name: str, owner_id: int, roles: List[_types.JsonDict], id_num: int = -1, emojis: List[_types.JsonDict] = None, icon: str | None = None, splash: str | None = None, region: str = 'en_north', afk_channel_id: int = None, afk_timeout: int = 600, verification_level: int = 0, default_message_notifications: int = 0, explicit_content_filter: int = 0, features: List[str] = None, mfa_level: int = 0, application_id: int = None, system_channel_id: int = None, *, owner: bool = ..., permissions: int = ..., embed_enabled: bool = ..., embed_channel_id: int = ..., widget_enabled: bool = ..., widget_channel_id: int = ..., joined_at: int = ..., large: bool = ..., unavailable: bool = ..., member_count: int = ..., voice_states: List[VoiceState] = ..., members: List[Member] = ..., channels: List[GuildChannel] = ..., presences: List[Activity] = ...) → _types.JsonDict¶
+
+dict_from_guild(guild: Guild) → Dict[str, str | int | bool | Dict[str, JsonVal] | List[JsonVal]]¶
+
+dpytest
+
+Navigation
+
+Dpytest Tutorials
+API Reference
+Backend
+Callbacks
+Factories
+Runner
+State
+Utils
+Verify
+Factories
+
+Related Topics
+
+Documentation overview
+API Reference
+Previous: Callbacks
+Next: Runner
+
+Quick search
+
+      ©2020, CraftSpider.
+
+      |
+      Powered by Sphinx 7.0.1
+      & Alabaster 0.7.13
+
+      |
+      Page source
+
+================================================================================
+
+Document 7: https://dpytest.readthedocs.io/en/latest/modules/runner.html
+--------------------------------------------------------------------------------
+Runner — dpytest 0.7.0 documentation
+
+Runner¶
+Main module for setting up and running tests using dpytest.
+Handles configuration of a bot, and setup of the discord environment.
+All public functions in this module are re-exported at discord.ext.test, this is the primary
+entry point for users of the library and most of what they should interact with
+
+See also:discord.ext.test.verify
+
+class RunnerConfig(client: Client, guilds: List[Guild], channels: List[GuildChannel], members: List[Member])¶
+Exposed discord test configuration
+Contains the current client, and lists of faked objects
+
+client: Client¶
+Alias for field number 0
+
+guilds: List[Guild]¶
+Alias for field number 1
+
+channels: List[GuildChannel]¶
+Alias for field number 2
+
+members: List[Member]¶
+Alias for field number 3
+
+__slots__ = ()¶
+
+require_config(func: Callable[[...], T]) → Callable[[...], T]¶
+
+Decorator to enforce that configuration is completed before the decorated function is
+called.
+
+Parameters:
+func – Function to decorate
+
+Returns:
+Function with added check for configuration being setup
+
+async run_all_events() → None¶
+Ensure that all dpy related coroutines have completed or been cancelled. If any dpy coroutines
+are currently running, this will also wait for those.
+
+async finish_on_command_error() → None¶
+Ensure that all dpy related coroutines have completed or been cancelled. This will only
+wait for dpy related coroutines, not any other coroutines currently running.
+
+get_message(peek: bool = False) → Message¶
+
+Allow the user to retrieve the most recent message sent by the bot
+
+Parameters:
+peek – If true, message will not be removed from the queue
+
+Returns:
+Most recent message from the queue
+
+get_embed(peek: bool = False) → Embed¶
+
+Allow the user to retrieve an embed in a message sent by the bot
+
+Parameters:
+peek – do not remove the message from the queue of messages
+
+Returns:
+Embed of the most recent message in the queue
+
+async empty_queue() → None¶
+Empty the current message queue. Waits for all events to complete to ensure queue
+is not immediately added to after running.
+
+message(content: str, channel: TextChannel | CategoryChannel | GuildChannel | PrivateChannel | int = 0, member: Member | int = 0, attachments: List[Path | str] = None) → Message¶
+
+Fake a message being sent by some user to a channel.
+
+Parameters:
+
+content – Content of the message
+channel – Channel to send to, or index into the config list
+member – Member sending the message, or index into the config list
+attachments – Message attachments to include, as file paths.
+
+Returns:
+New message that was sent
+
+set_permission_overrides(target: User | Role, channel: GuildChannel, overrides: PermissionOverwrite | None = None, **kwargs: Any) → None¶
+
+Set the permission override for a channel, as if set by another user.
+
+Parameters:
+
+target – User or Role the permissions override is being set for
+channel – Channel the permissions are being set on
+overrides – The permissions to use, as an object. Conflicts with using kwargs
+kwargs – The permissions to use, as a set of keys and values. Conflicts with using overrides
+
+add_role(member: Member, role: Role) → None¶
+
+Add a role to a member, as if added by another user.
+
+Parameters:
+
+member – Member to add the role to
+role – Role to be added
+
+remove_role(member: Member, role: Role) → None¶
+
+Remove a role from a member, as if removed by another user.
+
+Parameters:
+
+member – Member to remove the role from
+role – Role to remove
+
+add_reaction(user: BaseUser | User, message: Message, emoji: str) → None¶
+
+Add a reaction to a message, as if added by another user
+
+Parameters:
+
+user – User who reacted
+message – Message they reacted to
+emoji – Emoji that was used
+
+remove_reaction(user: BaseUser | User, message: Message, emoji: str) → None¶
+
+Remove a reaction from a message, as if done by another user
+
+Parameters:
+
+user – User who removed their react
+message – Message they removed react from
+emoji – Emoji that was removed
+
+member_join(guild: Guild | int = 0, user: User | None = None, *, name: str = None, discrim: str | int = None) → Member¶
+
+Have a new member join a guild, either an existing or new user for the framework
+
+Parameters:
+
+guild – Guild member is joining
+user – User to join, or None to create a new user
+name – If creating a new user, the name of the user. None to auto-generate
+discrim – If creating a new user, the discrim of the user. None to auto-generate
+
+get_config() → RunnerConfig¶
+
+Get the current runner configuration
+
+Returns:
+Current runner config
+
+configure(client: Client, guilds: int | List[str] = 1, text_channels: int | List[str] = 1, voice_channels: int | List[str] = 1, members: int | List[str] = 1) → None¶
+
+Set up the runner configuration. This should be done before any tests are run.
+
+Parameters:
+
+client – Client to configure with. Should be the bot/client that is going to be tested.
+guilds – Number or list of names of guilds to start the configuration with. Default is 1
+text_channels – Number or list of names of text channels in each guild to start with. Default is 1
+voice_channels – Number or list of names of voice channels in each guild to start with. Default is 1.
+members – Number or list of names of members in each guild (other than the client) to start with. Default is 1.
+
+dpytest
+
+Navigation
+
+Dpytest Tutorials
+API Reference
+Backend
+Callbacks
+Factories
+Runner
+State
+Utils
+Verify
+Factories
+
+Related Topics
+
+Documentation overview
+API Reference
+Previous: Factories
+Next: State
+
+Quick search
+
+      ©2020, CraftSpider.
+
+      |
+      Powered by Sphinx 7.0.1
+      & Alabaster 0.7.13
+
+      |
+      Page source
+
+================================================================================
+
+Document 8: https://dpytest.readthedocs.io/en/latest/modules/state.html
+--------------------------------------------------------------------------------
+State — dpytest 0.7.0 documentation
+
+State¶
+Mock implementation of a discord.state.ConnectionState. Overwrites a Client's default state, allowing hooking of
+its methods and support for test-related features.
+
+class FakeState(client: Client, http: HTTPClient, user: ClientUser | None = None, loop: AbstractEventLoop | None = None)¶
+A mock implementation of a ConnectionState. Overrides methods that would otherwise cause issues, and
+implements functionality such as disabling dispatch temporarily.
+
+http: back.FakeHttp¶
+
+__init__(client: Client, http: HTTPClient, user: ClientUser | None = None, loop: AbstractEventLoop | None = None) → None¶
+
+stop_dispatch() → None¶
+Stop dispatching events to the client, if we are
+
+start_dispatch() → None¶
+Start dispatching events to the client, if we aren't already
+
+async query_members(guild: Guild, query: str, limit: int, user_ids: int, cache: bool, presences: bool) → None¶
+
+async chunk_guild(guild: Guild, *, wait: bool = True, cache: bool | None = None)¶
+
+parse_channel_create(data) → None¶
+Need to make sure that FakeVoiceChannels are created when this is called to create VoiceChannels. Otherwise,
+guilds would not be set up correctly.
+
+Parameters:
+data – info to use in channel creation.
+
+dpytest
+
+Navigation
+
+Dpytest Tutorials
+API Reference
+Backend
+Callbacks
+Factories
+Runner
+State
+Utils
+Verify
+Factories
+
+Related Topics
+
+Documentation overview
+API Reference
+Previous: Runner
+Next: Utils
+
+Quick search
+
+      ©2020, CraftSpider.
+
+      |
+      Powered by Sphinx 7.0.1
+      & Alabaster 0.7.13
+
+      |
+      Page source
+
+================================================================================
+
+Document 9: https://dpytest.readthedocs.io/en/latest/modules/utils.html
+--------------------------------------------------------------------------------
+Utils — dpytest 0.7.0 documentation
+
+Utils¶
+Utility functions that don't have a place anywhere else. If it doesn't sound like it fits anywhere else,
+and it's small, it probably goes here.
+
+embed_eq(embed1: Embed | None, embed2: Embed | None) → bool¶
+
+activity_eq(act1: Activity | None, act2: Activity | None) → bool¶
+
+embed_proxy_eq(embed_proxy1, embed_proxy2)¶
+
+class PeekableQueue(maxsize=0, *, loop=None)¶
+An extension of an asyncio queue with a peek message, so other code doesn't need to rely on unstable
+internal artifacts
+
+peek()¶
+
+Peek the current last value in the queue, or raise an exception if there are no values
+
+Returns:
+Last value in the queue, assuming there are any
+
+dpytest
+
+Navigation
+
+Dpytest Tutorials
+API Reference
+Backend
+Callbacks
+Factories
+Runner
+State
+Utils
+Verify
+Factories
+
+Related Topics
+
+Documentation overview
+API Reference
+Previous: State
+Next: Verify
+
+Quick search
+
+      ©2020, CraftSpider.
+
+      |
+      Powered by Sphinx 7.0.1
+      & Alabaster 0.7.13
+
+      |
+      Page source
+
+================================================================================
+
+Document 10: https://dpytest.readthedocs.io/en/latest/modules/verify.html
+--------------------------------------------------------------------------------
+Verify — dpytest 0.7.0 documentation
+
+Verify¶
+Main module for supporting predicate-style assertions.
+Handles checking various state matches the desired outcome.
+All verify types should be re-exported at discord.ext.test, this is the primary
+entry point for assertions in the library
+
+See also:discord.ext.test.runner
+
+class VerifyMessage¶
+Builder for message verifications. When done building, should be asserted.
+Example:
+assert dpytest.verify().message().content("Hello World!")
+
+__init__() → None¶
+
+contains() → VerifyMessage¶
+
+Only check whether content/embed list/etc contain the desired input, not that they necessarily match
+exactly
+
+Returns:
+Self for chaining
+
+peek() → VerifyMessage¶
+
+Don't remove the verified message from the queue
+
+Returns:
+Self for chaining
+
+nothing() → VerifyMessage¶
+
+Check that no message was sent
+
+Returns:
+Self for chaining
+
+content(content: str | None) → VerifyMessage¶
+
+Check that the message content matches the input
+
+Parameters:
+content – Content to match against, or None to ensure no content
+
+Returns:
+Self for chaining
+
+embed(embed: Embed | None) → VerifyMessage¶
+
+Check that the message embed matches the input
+
+Parameters:
+embed – Embed to match against, or None to ensure no embed
+
+Returns:
+Self for chaining
+
+attachment(attach: str | Path | None) → VerifyMessage¶
+
+Check that the message attachment matches the input
+
+Parameters:
+attach – Attachment path to match against, or None to ensure no attachment
+
+Returns:
+Self for chaining
+
+class VerifyActivity¶
+Builder for activity verifications. When done building, should be asserted
+Example:
+assert not dpytest.verify().activity().name("Foobar")
+
+__init__() → None¶
+
+matches(activity) → VerifyActivity¶
+
+Ensure that the bot activity exactly matches the passed activity. Most restrictive possible check.
+
+Parameters:
+activity – Activity to compare against
+
+Returns:
+Self for chaining
+
+name(name: str) → VerifyActivity¶
+
+Check that the activity name matches the input
+
+Parameters:
+name – Name to match against
+
+Returns:
+Self for chaining
+
+url(url: str) → VerifyActivity¶
+
+Check the the activity url matches the input
+
+Parameters:
+url – Url to match against
+
+Returns:
+Self for chaining
+
+type(type: discord.ActivityType) → VerifyActivity¶
+
+Check the activity type matches the input
+
+Parameters:
+type – Type to match against
+
+Returns:
+Self for chaining
+
+class Verify¶
+Base for all kinds of verification builders. Used as an
+intermediate step for the return of verify().
+
+__init__()¶
+
+message() → VerifyMessage¶
+
+Verify a message
+
+Returns:
+Message verification builder
+
+activity() → VerifyActivity¶
+
+Verify the bot's activity
+
+Returns:
+Activity verification builder
+
+verify() → Verify¶
+
+Verification entry point. Call to begin building a verification.
+Warning: All verification builders do nothing until asserted, used in an if statement,
+or otherwise converted into a bool. They will raise RuntimeWarning if this isn't done to help
+catch possible errors.
+
+Returns:
+Verification builder
+
+dpytest
+
+Navigation
+
+Dpytest Tutorials
+API Reference
+Backend
+Callbacks
+Factories
+Runner
+State
+Utils
+Verify
+Factories
+
+Related Topics
+
+Documentation overview
+API Reference
+Previous: Utils
+Next: Factories
+
+Quick search
+
+      ©2020, CraftSpider.
+
+      |
+      Powered by Sphinx 7.0.1
+      & Alabaster 0.7.13
+
+      |
+      Page source
+
+================================================================================
+
+Document 11: https://dpytest.readthedocs.io/en/latest/modules/websocket.html
+--------------------------------------------------------------------------------
+Factories — dpytest 0.7.0 documentation
+
+Factories¶
+Mock implementation of a discord.gateway.DiscordWebSocket. Overwrites a Client's default websocket, allowing
+hooking of its methods to update the backend and provide callbacks.
+
+class FakeWebSocket(*args: Any, **kwargs: Any)¶
+A mock implementation of a DiscordWebSocket. Instead of actually sending information to discord,
+it simply triggers calls to the dpytest backend, as well as triggering runner callbacks.
+
+__init__(*args: Any, **kwargs: Any) → None¶
+
+async send(data: Dict[str, str | int | bool | Dict[str, JsonVal] | List[JsonVal]]) → None¶
+
+async change_presence(*, activity: BaseActivity | None = None, status: str | None = None, since: float = 0.0) → None¶
+
+dpytest
+
+Navigation
+
+Dpytest Tutorials
+API Reference
+Backend
+Callbacks
+Factories
+Runner
+State
+Utils
+Verify
+Factories
+
+Related Topics
+
+Documentation overview
+API Reference
+Previous: Verify
+
+Quick search
+
+      ©2020, CraftSpider.
+
+      |
+      Powered by Sphinx 7.0.1
+      & Alabaster 0.7.13
+
+      |
+      Page source
+
+================================================================================
