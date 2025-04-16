@@ -1,0 +1,66 @@
+---
+description: This rule should be applied when implementing unit tests for LangChain retriever components. Apply this rule when (1) creating new retriever classes in LangChain, (2) implementing tests for existing retrievers, (3) troubleshooting retriever test failures, or (4) contributing to the LangChain ecosystem. This standardizes testing practices for unit testing across LangChain integrations, ensuring consistent quality and behavior. Proper unit testing is essential for reliable retrieval operations which are critical for RAG applications and knowledge retrieval systems.
+globs:
+alwaysApply: false
+---
+
+# LangChain Retriever Unit Testing Standards
+
+## Critical Rules
+
+- Always place retriever unit tests in the `tests/unit_tests` directory
+- Test classes must subclass `RetrieverUnitTests` from `langchain_tests.unit_tests`
+- Always implement the three required properties in test classes:
+  - `retriever_constructor`: Return the retriever class to be tested
+  - `retriever_constructor_params`: Return a dictionary of parameters for instantiation
+  - `retriever_query_example`: Return a string example query for testing
+- Run unit tests with network disabled using `--disable-socket --allow-unix-socket`
+- Pin the version of `langchain-tests` in your dependencies to avoid breaking changes
+- Never implement tests that rely on external services in unit tests
+- Always include edge cases like empty queries or maximum token handling in your test suite
+- Run unit tests with `--asyncio-mode=auto` flag for proper async test handling
+
+## Examples
+
+<example>
+# tests/unit_tests/test_retrievers.py
+
+from typing import Type
+from langchain_parrot_link.retrievers import ParrotRetriever
+from langchain_tests.unit_tests import RetrieverUnitTests
+
+class TestParrotRetriever(RetrieverUnitTests):
+    @property
+    def retriever_constructor(self) -> Type[ParrotRetriever]:
+        """Return the retriever class for unit tests."""
+        return ParrotRetriever
+
+    @property
+    def retriever_constructor_params(self) -> dict:
+        """Return parameters for the retriever constructor."""
+        return {"k": 2}
+
+    @property
+    def retriever_query_example(self) -> str:
+        """Returns a str representing the `query` of an example retriever call."""
+        return "example query"
+
+# Command to run tests:
+# uv run pytest --disable-socket --allow-unix-socket --asyncio-mode=auto tests/unit_tests
+</example>
+
+<example type="invalid">
+# test_retriever.py (incorrect location)
+
+from langchain_parrot_link.retrievers import ParrotRetriever
+from langchain_tests import RetrieverUnitTests  # Incorrect import path
+
+# Missing class definition and inheritance
+def test_parrot_retriever():
+    retriever = ParrotRetriever(k=2)
+    results = retriever.get_relevant_documents("query")
+    assert len(results) == 2
+
+# No property definitions for required test parameters
+# Missing test command with proper flags
+</example>

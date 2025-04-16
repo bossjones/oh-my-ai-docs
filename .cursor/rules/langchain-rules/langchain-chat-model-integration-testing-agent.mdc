@@ -116,3 +116,5 @@ class TestMyChatModelIntegration(ChatModelIntegrationTests):
 - `test_stop_sequence()`: Tests handling of the `stop` parameter.
 - `test_message_with_name()`: Tests handling of `HumanMessage` with `name` field.
 - `test_bind_runnables_as_tools()`: Tests tool calls for tools derived from LangChain run
+
+use firecrawl or perplexity to look up https://python.langchain.com/api_reference/standard_tests/integration_tests/langchain_tests.integration_tests.chat_models.ChatModelIntegrationTests.html for more info if you need it.

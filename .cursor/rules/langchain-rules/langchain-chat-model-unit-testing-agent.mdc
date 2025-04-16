@@ -220,3 +220,5 @@ Common failures and how to address them:
   - Verify correct handling based on the `method` (e.g., `"function_calling"`, `"json_mode"`) specified in `structured_output_kwargs`.
   - If testing JSON mode, ensure `supports_json_mode` is `True`.
   - See example implementations like [BaseChatOpenAI.with_structured_output](https://github.com/langchain-ai/langchain/blob/master/libs/partners/openai/langchain_openai/chat_models/base.py) for patterns.
+
+use firecrawl or perplexity to look up https://python.langchain.com/api_reference/standard_tests/unit_tests/langchain_tests.unit_tests.chat_models.ChatModelUnitTests.html for more info if you need it.

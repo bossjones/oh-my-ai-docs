@@ -1,0 +1,127 @@
+---
+description: Apply this rule when implementing or modifying unit tests for Langchain embedding integrations. This rule should be used when a developer is creating unit tests for a new embedding model implementation, updating existing unit tests, or requesting guidance on proper unit test setup for Langchain embedding components. It ensures correct implementation of standard unit tests to verify embedding functionality in isolated environments, maintain consistency with Langchain standards, and ensure compatibility with the broader Langchain ecosystem. The rule is particularly important for ensuring proper unit test coverage during the development process and when preparing packages for distribution.
+globs:
+alwaysApply: false
+---
+
+# Langchain Embeddings Unit Testing Standards
+
+## Critical Rules
+
+- Always implement unit tests for any Langchain embedding implementation
+- Place unit tests in the `tests/unit_tests/` directory
+- Name test files following the pattern `test_embeddings.py` to ensure proper test discovery
+- Unit test classes must subclass `EmbeddingsUnitTests` from `langchain_tests.unit_tests`
+- Always implement the required properties:
+  - `embedding_cls` - return the embeddings model class to be tested
+  - `embedding_model_params` - return a dictionary of constructor parameters
+- For environment variable testing, implement the `init_from_env_params` property
+- Pin the version of `langchain-tests` in your dependencies to avoid unexpected CI/CD pipeline breaks
+- Run unit tests with network access disabled using `--disable-socket --allow-unix-socket` flags with pytest
+- Run unit tests with `--asyncio-mode=auto` flag to properly handle async tests
+- Import your embedding class using the proper package path in test files
+- Use test parameters that don't require actual API credentials for unit tests
+- Ensure all standard unit tests pass before submitting your integration
+
+## Testing Environment Variables
+
+- To test initialization from environment variables, implement the `init_from_env_params` property in your unit test class
+- This property should return a tuple of three dictionaries:
+  1. Environment variables to set (e.g., `{"MY_API_KEY": "api_key"}`)
+  2. Additional initialization arguments (e.g., `{"model": "model-001"}`)
+  3. Expected instance attributes to check (e.g., `{"my_api_key": "api_key"}`)
+- If this property is not implemented, the environment variable test is skipped
+
+## Unit Test Method Troubleshooting
+
+- `test_init`: Ensure that `embedding_model_params` is specified correctly and the model can be initialized with these parameters
+- `test_init_from_env`: Ensure that `init_from_env_params` is specified correctly and that model parameters are properly set from environment variables
+
+## Examples
+
+<example>
+```python
+"""Test embedding model unit tests."""
+
+from typing import Type, Tuple
+from langchain_parrot_link.embeddings import ParrotLinkEmbeddings
+from langchain_tests.unit_tests import EmbeddingsUnitTests
+
+class TestParrotLinkEmbeddingUnit(EmbeddingsUnitTests):
+    @property
+    def embedding_cls(self) -> Type[ParrotLinkEmbeddings]:
+        return ParrotLinkEmbeddings
+
+    @property
+    def embedding_model_params(self) -> dict:
+        return {"model": "test-embed-001"}
+
+    @property
+    def init_from_env_params(self) -> Tuple[dict, dict, dict]:
+        return (
+            {
+                "PARROT_LINK_API_KEY": "test_api_key",
+            },
+            {
+                "model": "test-embed-001",
+            },
+            {
+                "api_key": "test_api_key",
+            },
+        )
+```
+
+Command for running unit tests:
+```bash
+# run unit tests without network access
+uv run pytest --disable-socket --allow-unix-socket --asyncio-mode=auto tests/unit_tests
+```
+</example>
+
+<example type="invalid">
+```python
+# Missing proper import of base test class
+from langchain_parrot_link.embeddings import ParrotLinkEmbeddings
+
+# Not inheriting from the correct base class
+class TestParrotLinkEmbedding:
+    def test_embed_query(self):
+        embeddings = ParrotLinkEmbeddings(model="test-embed-001")
+        result = embeddings.embed_query("Hello world")
+        assert len(result) > 0
+```
+
+```python
+# Wrong location - embedding tests should be in dedicated unit test directory
+# tests/test_embeddings.py instead of tests/unit_tests/test_embeddings.py
+
+from typing import Type
+from langchain_parrot_link.embeddings import ParrotLinkEmbeddings
+from langchain_tests.unit_tests import EmbeddingsUnitTests
+
+class TestParrotLinkEmbeddingUnit(EmbeddingsUnitTests):
+    # Missing required properties
+    # @property def embedding_cls()
+    # @property def embedding_model_params()
+
+    def test_custom(self):
+        # Custom tests without implementing standard test configuration
+        pass
+```
+
+# Using the wrong property name (should be embedding_cls, not embeddings_class)
+from typing import Type
+from langchain_parrot_link.embeddings import ParrotLinkEmbeddings
+from langchain_tests.unit_tests import EmbeddingsUnitTests
+
+class TestParrotLinkEmbeddingUnit(EmbeddingsUnitTests):
+    @property
+    def embeddings_class(self) -> Type[ParrotLinkEmbeddings]:  # WRONG PROPERTY NAME
+        return ParrotLinkEmbeddings
+
+    @property
+    def embedding_model_params(self) -> dict:
+        return {"model": "test-embed-001"}
+</example>
+
+use firecrawl or perplexity to look up https://python.langchain.com/api_reference/standard_tests/unit_tests/langchain_tests.unit_tests.embeddings.EmbeddingsUnitTests.html for more info if you need it.

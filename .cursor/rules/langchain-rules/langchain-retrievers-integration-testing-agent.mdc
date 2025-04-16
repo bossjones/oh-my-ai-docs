@@ -1,0 +1,87 @@
+---
+description: This rule should be applied when implementing integration tests for LangChain retriever components. Apply this rule when (1) testing retrievers that interact with external services, (2) validating end-to-end retriever functionality, (3) testing retrievers with real data sources, or (4) contributing integration tests to the LangChain ecosystem. This standardizes integration testing practices across LangChain components, ensuring retrievers work properly with their intended external services and data sources. Proper integration testing is essential for reliable retrieval operations in production environments.
+globs:
+alwaysApply: false
+---
+
+# LangChain Retriever Integration Testing Standards
+
+## Critical Rules
+
+- Always place retriever integration tests in the `tests/integration_tests` directory
+- Test classes must subclass `RetrieverIntegrationTests` from `langchain_tests.integration_tests`
+- Always implement the three required properties in test classes:
+  - `retriever_constructor`: Return the retriever class to be tested
+  - `retriever_constructor_params`: Return a dictionary of parameters for instantiation with real service credentials
+  - `retriever_query_example`: Return a string example query for testing against the real service
+- Do not use `--disable-socket` flag when running integration tests
+- Always run integration tests with `--asyncio-mode=auto` flag for proper async test handling
+- Pin the version of `langchain-tests` in your dependencies to avoid breaking changes
+- Use environment variables or secure methods to manage credentials needed for integration tests
+- Set up proper test fixtures to initialize and clean up external service connections
+- Skip integration tests when appropriate credentials are not available
+- Test with realistic queries that exercise the retriever's integration with external services
+
+## Examples
+
+<example>
+# tests/integration_tests/test_retrievers.py
+
+from typing import Type
+import os
+import pytest
+from langchain_parrot_link.retrievers import ParrotRetriever
+from langchain_tests.integration_tests import RetrieverIntegrationTests
+
+class TestParrotRetriever(RetrieverIntegrationTests):
+    @pytest.fixture(autouse=True)
+    def setup_api_key(self):
+        """Set up API key for integration tests."""
+        if "PARROT_API_KEY" not in os.environ:
+            pytest.skip("PARROT_API_KEY environment variable not set")
+
+    @property
+    def retriever_constructor(self) -> Type[ParrotRetriever]:
+        """Return the retriever class for integration tests."""
+        return ParrotRetriever
+
+    @property
+    def retriever_constructor_params(self) -> dict:
+        """Return parameters for the retriever constructor with real credentials."""
+        return {
+            "api_key": os.environ.get("PARROT_API_KEY"),
+            "k": 2,
+            "index_name": "test-index"
+        }
+
+    @property
+    def retriever_query_example(self) -> str:
+        """Returns a str representing the `query` of an example retriever call."""
+        return "What is the capital of France?"
+
+# Command to run tests:
+# uv run pytest --asyncio-mode=auto tests/integration_tests
+</example>
+
+<example type="invalid">
+# tests/unit_tests/test_retriever_integration.py (incorrect location)
+
+from langchain_parrot_link.retrievers import ParrotRetriever
+from langchain_tests.unit_tests import RetrieverUnitTests  # Wrong base class
+
+class TestParrotRetriever(RetrieverUnitTests):  # Should use RetrieverIntegrationTests
+    @property
+    def retriever_constructor(self):
+        return ParrotRetriever
+
+    @property
+    def retriever_constructor_params(self):
+        # Hardcoded API key is a security risk
+        return {"api_key": "sk-123456", "k": 2}
+
+    # Missing environment variable check
+    # Missing proper test fixture setup
+    # Integration test placed in unit_tests directory
+</example>
+
+use firecrawl or perplexity to look up https://python.langchain.com/api_reference/standard_tests/integration_tests/langchain_tests.integration_tests.retrievers.RetrieversIntegrationTests.html for more info if you need it.
