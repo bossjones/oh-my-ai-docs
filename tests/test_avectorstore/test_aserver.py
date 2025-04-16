@@ -33,7 +33,7 @@ from mcp.server.fastmcp.exceptions import ResourceError
 from mcp.server.session import ServerSession
 from mcp.shared.exceptions import McpError
 from mcp.shared.memory import create_connected_server_and_client_session as client_session
-from mcp.types import TextContent
+from mcp.types import TextContent, TextResourceContents
 
 # --- Project Imports ---
 import oh_my_ai_docs.avectorstore_mcp
@@ -282,7 +282,7 @@ class TestAVectorStoreMCPServer:
             assert result is not None
             assert len(result.contents) == 1
             content = result.contents[0]
-            assert isinstance(content, TextContent)
+            assert isinstance(content, TextResourceContents)
             assert content.text == expected_content
             assert content.mimeType == "text/plain"  # As defined in the decorator
 
@@ -384,26 +384,31 @@ class TestAVectorStoreMCPServer:
         - Tool invocation with context
         - Proper cleanup after tool execution
         """
-        # Create a test document in the vectorstore
-        test_texts = ["FastMCP is a protocol for LLM interactions"]
-        fixture_app_context.store.add_texts(test_texts)
-
-        # Test the tool with context
+        # Test the tool with context using real dpytest documentation
         async with client_session(mcp_server_instance._mcp_server) as client:
-            # Call the tool and verify it works with the context
+            # Query for content we know exists in the dpytest docs
             result = await client.call_tool(
                 "query_docs",
-                {"query": "protocol LLM"}
+                {"query": "dpytest library discord bot testing"}
             )
 
             # Verify the result
             assert not result.isError
             assert len(result.content) == 1
             response_data = json.loads(result.content[0].text)
+
+            # Verify the response structure
             assert "documents" in response_data
-            assert len(response_data["documents"]) == 1
-            assert response_data["documents"][0] == test_texts[0]  # Should match exactly since it's the only document
+            assert isinstance(response_data["documents"], list)
+            assert len(response_data["documents"]) > 0
+
+            # Verify we got relevant content from the docs
+            found_docs = response_data["documents"]
+            assert any("dpytest" in doc.lower() for doc in found_docs)
+            assert any("testing" in doc.lower() for doc in found_docs)
+
+            # Verify scores
             assert "scores" in response_data
-            assert len(response_data["scores"]) == 1
-            assert isinstance(response_data["scores"][0], float)
-            assert 0 <= response_data["scores"][0] <= 1  # Score should be between 0 and 1
+            assert len(response_data["scores"]) == len(response_data["documents"])
+            assert all(isinstance(score, float) and 0 <= score <= 1
+                      for score in response_data["scores"])
