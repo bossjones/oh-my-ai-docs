@@ -167,67 +167,6 @@ class TestAVectorStoreMCPServer:
             assert all(isinstance(score, float) and 0 <= score <= 1
                       for score in response_data["scores"])
 
-    # @pytest.mark.anyio
-    # @pytest.mark.fastmcp_tools
-    # @pytest.mark.langchain_tool_integration
-    # async def test_query_empty_string(self, mcp_server_instance: FastMCP):
-    #     """Test calling the query tool with an empty string."""
-    #     async with client_session(mcp_server_instance._mcp_server) as client:
-    #         with pytest.raises(McpError) as exc_info:
-    #             await client.call_tool("query_docs", {"query": "  "}) # Whitespace only
-
-    #     # FastMCP should catch the ValueError raised by the tool and convert it
-    #     assert "Query cannot be empty" in str(exc_info.value)
-    #     # The error code might vary depending on FastMCP's mapping
-    #     # assert exc_info.value.code == "INVALID_PARAMS" or exc_info.value.code == -32602
-
-    # @pytest.mark.anyio
-    # @pytest.mark.fastmcp_tools
-    # @pytest.mark.vectorstore
-    # @pytest.mark.langchain_retrievers_integration
-    # async def test_query_retriever_error(
-    #     self,
-    #     fixture_app_context: AppContext,
-    #     mocker: MockerFixture,
-    #     caplog: LogCaptureFixture,
-    #     capsys: CaptureFixture[str],
-    #     mcp_server_instance: FastMCP
-    # ):
-    #     with capsys.disabled():
-    #         """Test when the underlying retriever raises an exception."""
-    #         error_message = "Vector store connection failed"
-
-    #         # Create a mock retriever
-    #         mock_retriever = mocker.Mock()
-    #         mock_retriever.invoke = mocker.AsyncMock(side_effect=RuntimeError(error_message))
-
-    #         # Patch the as_retriever method to return our mock
-    #         mocker.patch.object(
-    #             fixture_app_context.store,
-    #             "as_retriever",
-    #             return_value=mock_retriever
-    #         )
-
-    #         # Patch get_context to return our fixture context
-    #         mocker.patch(
-    #             "oh_my_ai_docs.avectorstore_mcp.mcp_server.get_context",
-    #             return_value=fixture_app_context
-    #         )
-
-    #         async with client_session(mcp_server_instance._mcp_server) as client:
-    #             # with pytest.raises(McpError) as exc_info:
-    #             result = await client.call_tool("query_docs", {"query": "trigger error"})
-    #             assert result is not None
-    #             assert result.isError
-    #             assert len(result.content) == 1
-    #             assert isinstance(result.content[0], TextContent)
-    #             assert "Failed to query vectorstore" in result.content[0].text
-
-    #         # The server should catch the underlying error and wrap it
-    #         # assert "Failed to query vectorstore" in str(exc_info.value)
-    #         # assert error_message in str(exc_info.value) # Include original error
-    #         # Verify invoke was called with correct parameters
-    #         mock_retriever.invoke.assert_called_once_with("trigger error")
 
     # -- Resource ('module_documentation') Tests --
 
