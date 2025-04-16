@@ -143,7 +143,8 @@
     version = "0.2.0"
 
     [project.scripts]
-        goobctl = 'oh_my_ai_docs.cli:entry'
+        avectorstore_mcp = 'oh_my_ai_docs.avectorstore_mcp:main'
+        goobctl          = 'oh_my_ai_docs.cli:entry'
 
     [project.urls]
         "Bug Tracker"   = "https://github.com/bossjones/oh-my-ai-docs/issues"

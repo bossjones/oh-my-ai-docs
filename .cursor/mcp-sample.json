@@ -41,24 +41,47 @@
         "localhost"
       ]
     },
-    "dpytest-vectorstore-mcp": {
+    "discord-avectorstore-mcp": {
       "command": "uv",
       "args": [
         "run",
-        "./scripts/vectorstore_mcp.py",
+        "--directory",
+        "/Users/malcolm/dev/bossjones/oh-my-ai-docs/src/oh_my_ai_docs",
+        "--env-file",
+        "/Users/malcolm/dev/bossjones/oh-my-ai-docs/.envrc",
+        "avectorstore_mcp",
+        "--module",
+        "discord",
+        "--stdio",
+        "--debug"
+      ]
+    },
+    "dpytest-avectorstore-mcp": {
+      "command": "uv",
+      "args": [
+        "run",
+        "--directory",
+        "/Users/malcolm/dev/bossjones/oh-my-ai-docs/src/oh_my_ai_docs",
+        "--env-file",
+        "/Users/malcolm/dev/bossjones/oh-my-ai-docs/.envrc",
+        "avectorstore_mcp",
         "--module",
         "dpytest",
         "--stdio",
         "--debug"
       ]
     },
-    "discord-avectorstore-mcp": {
+    "langgraph-avectorstore-mcp": {
       "command": "uv",
       "args": [
         "run",
-        "./src/oh_my_ai_docs/avectorstore_mcp.py",
+        "--directory",
+        "/Users/malcolm/dev/bossjones/oh-my-ai-docs/src/oh_my_ai_docs",
+        "--env-file",
+        "/Users/malcolm/dev/bossjones/oh-my-ai-docs/.envrc",
+        "avectorstore_mcp",
         "--module",
-        "discord",
+        "langgraph",
         "--stdio",
         "--debug"
       ]
