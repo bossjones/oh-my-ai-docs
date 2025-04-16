@@ -59,12 +59,14 @@ class TestAVectorStoreMCPServer:
 
     @pytest.mark.anyio
     @pytest.mark.fastmcp_basic
+    @pytest.mark.langchain_tool_integration
     async def test_server_initialization(self, mcp_server_instance: FastMCP):
         """Verify the server name is correctly set based on args."""
         assert mcp_server_instance.name == f"{TEST_MODULE}-docs-mcp-server"
 
     @pytest.mark.anyio
     @pytest.mark.fastmcp_tools
+    @pytest.mark.langchain_tool_integration
     async def test_tool_registration(self, mcp_server_instance: FastMCP):
         """Check if the 'query_docs' tool is registered correctly."""
         tools = mcp_server_instance._tool_manager.list_tools()
@@ -84,6 +86,7 @@ class TestAVectorStoreMCPServer:
 
     @pytest.mark.anyio
     @pytest.mark.fastmcp_resources
+    @pytest.mark.langchain_vectorstore_integration
     async def test_resource_registration(self, mcp_server_instance: FastMCP):
         """Check if the 'module_documentation' resource is registered correctly."""
         # Resources defined with URI templates are stored differently
@@ -104,6 +107,7 @@ class TestAVectorStoreMCPServer:
     @pytest.mark.anyio
     @pytest.mark.fastmcp_tools
     @pytest.mark.vectorstore
+    @pytest.mark.langchain_vectorstore_integration
     async def test_query_success(
         self,
         fastmcp_vector_store: SKLearnVectorStore,
@@ -160,6 +164,7 @@ class TestAVectorStoreMCPServer:
 
     @pytest.mark.anyio
     @pytest.mark.fastmcp_tools
+    @pytest.mark.langchain_tool_integration
     async def test_query_empty_string(self, mcp_server_instance: FastMCP):
         """Test calling the query tool with an empty string."""
         async with client_session(mcp_server_instance._mcp_server) as client:
@@ -174,6 +179,7 @@ class TestAVectorStoreMCPServer:
     @pytest.mark.anyio
     @pytest.mark.fastmcp_tools
     @pytest.mark.vectorstore
+    @pytest.mark.langchain_retrievers_integration
     async def test_query_retriever_error(
         self,
         mock_app_context: AppContext,
@@ -206,6 +212,7 @@ class TestAVectorStoreMCPServer:
     @pytest.mark.anyio
     @pytest.mark.fastmcp_tools
     @pytest.mark.vectorstore
+    @pytest.mark.langchain_retrievers_integration
     async def test_query_timeout(
         self,
         mock_app_context: AppContext,
@@ -240,6 +247,7 @@ class TestAVectorStoreMCPServer:
 
     @pytest.mark.anyio
     @pytest.mark.fastmcp_resources
+    @pytest.mark.langchain_vectorstore_integration
     async def test_resource_success(
         self,
         test_file_structure: dict[str, Path], # Provides paths and patches BASE/DOCS_PATH
@@ -276,6 +284,7 @@ class TestAVectorStoreMCPServer:
 
     @pytest.mark.anyio
     @pytest.mark.fastmcp_resources
+    @pytest.mark.langchain_vectorstore_unit
     async def test_resource_module_mismatch(
         self,
         test_file_structure: dict[str, Path],
@@ -296,6 +305,7 @@ class TestAVectorStoreMCPServer:
 
     @pytest.mark.anyio
     @pytest.mark.fastmcp_resources
+    @pytest.mark.langchain_vectorstore_unit
     async def test_resource_file_not_found(
         self,
         test_file_structure: dict[str, Path],
@@ -321,6 +331,7 @@ class TestAVectorStoreMCPServer:
 
     @pytest.mark.anyio
     @pytest.mark.fastmcp_resources
+    @pytest.mark.langchain_vectorstore_unit
     async def test_resource_read_error(
         self,
         test_file_structure: dict[str, Path],
@@ -350,6 +361,7 @@ class TestAVectorStoreMCPServer:
     @pytest.mark.fastmcp_context
     @pytest.mark.fastmcp_tools
     @pytest.mark.vectorstore
+    @pytest.mark.langchain_vectorstore_integration
     async def test_lifespan_context_available_in_tool(
         self,
         mock_app_context: AppContext, # Fixture sets up the mock context
