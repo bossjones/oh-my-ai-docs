@@ -46,6 +46,7 @@ from oh_my_ai_docs.avectorstore_mcp import (
     get_vectorstore_path,
 )
 from tests.fake_embeddings import FakeEmbeddings
+import aiofiles
 
 # --- Constants ---
 TEST_MODULE = "dpytest"
@@ -118,18 +119,11 @@ class TestAVectorStoreMCPServer:
         Verifies:
         - Correct integration between FastMCP server and SKLearnVectorStore
         - Proper document retrieval and formatting in response
-        - Appropriate response structure and content
+        - Appropriate response structure and content using real dpytest documentation
         """
-        # Add test documents to the vectorstore
-        test_texts = [
-            "FastMCP is a protocol for LLM interactions",
-            "FastMCP provides tools and resources for AI development",
-            "The protocol enables seamless communication with language models"
-        ]
-        fixture_app_context.store.add_texts(test_texts)
+        # Test querying the vectorstore with content we know exists in dpytest docs
+        query_text = "discord bot testing"  # This should match content about dpytest's purpose
 
-        # Test querying the vectorstore
-        query_text = "protocol LLM"  # Should match first and third documents
         async with client_session(mcp_server_instance._mcp_server) as client:
             # Call the tool and verify results
             result = await client.call_tool("query_docs", {"query": query_text})
@@ -149,17 +143,20 @@ class TestAVectorStoreMCPServer:
             assert len(response_data["documents"]) > 0  # Should find at least one match
             assert len(response_data["documents"]) <= 3  # Default k=3 in QueryConfig
 
-            # Verify document content - should find the relevant documents
+            # Verify document content - should find relevant documentation about dpytest
             found_docs = response_data["documents"]
-            assert any("protocol" in doc.lower() for doc in found_docs)
-            assert any("llm" in doc.lower() for doc in found_docs)
+            # Look for key phrases we know are in the docs
+            assert any("testing" in doc.lower() for doc in found_docs)
+            assert any("discord" in doc.lower() for doc in found_docs)
+            assert any("dpytest" in doc.lower() for doc in found_docs)
 
             # Verify scores
             assert "scores" in response_data
             assert isinstance(response_data["scores"], list)
             assert len(response_data["scores"]) == len(response_data["documents"])
             # Verify all scores are floats between 0 and 1
-            assert all(isinstance(score, float) and 0 <= score <= 1 for score in response_data["scores"])
+            assert all(isinstance(score, float) and 0 <= score <= 1
+                      for score in response_data["scores"])
 
     # @pytest.mark.anyio
     # @pytest.mark.fastmcp_tools

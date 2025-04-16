@@ -235,7 +235,7 @@ async def save_mcp_config(config: dict[str, dict[str, Any]]) -> None:
 
 # Define validation models
 class QueryConfig(BaseModel):
-    k: int = Field(default=3, ge=1, le=10, description="Number of documents to retrieve")
+    k: int = Field(default=2, ge=1, le=10, description="Number of documents to retrieve")
     min_relevance_score: float = Field(default=0.0, ge=0.0, le=1.0, description="Minimum relevance score threshold")
 
     @field_validator("k")
@@ -354,14 +354,10 @@ async def query_tool(query: str) -> DocumentResponse:
     state: AppContext = cast(AppContext, ctx.request_context.lifespan_context)
 
     try:
-        # await ctx.info(f"Querying vectorstore with k={config.k}")
-
         # Get the retriever from the store, not from state directly
         retriever: VectorStoreRetriever = state.store.as_retriever(search_kwargs={"k": config.k})
 
         relevant_docs: list[Document] = await asyncio.to_thread(retriever.invoke, query)
-
-        # await ctx.info(f"Retrieved {len(relevant_docs)} relevant documents")
 
         documents: list[str] = []
         scores: list[float] = []

@@ -194,8 +194,8 @@ def fixture_app_context(
     Provides a realistic AppContext for testing, leveraging test_file_structure.
 
     - Injects FakeEmbeddings globally for the test's scope.
-    - Uses the real vectorstore_factory to create an SKLearnVectorStore instance,
-      pointing to the temporary persistence path created by test_file_structure.
+    - Uses TextLoader to load documents with proper metadata.
+    - Uses the real vectorstore_factory to create an SKLearnVectorStore instance.
     - Splits and processes documents using RecursiveCharacterTextSplitter.
     - Properly persists the store using parquet serialization.
     - Returns an AppContext containing the initialized store.
@@ -210,6 +210,7 @@ def fixture_app_context(
     )
     from langchain_core.documents import Document
     from langchain.text_splitter import RecursiveCharacterTextSplitter
+    from langchain_community.document_loaders import TextLoader
     import tiktoken
 
     # Inject fake embeddings for this test's scope
@@ -220,44 +221,49 @@ def fixture_app_context(
     vectorstore_path = test_file_structure["vectorstore_file"]
     try:
 
-        # Create a store using the real factory
-        store: SKLearnVectorStore = vectorstore_factory(
-            vector_store_cls=SKLearnVectorStore,
-            vector_store_kwargs={
-                "persist_path": str(vectorstore_path),
-                "serializer": "parquet",
-            },
-            embeddings=mock_openai_embeddings
-        )
 
         # --- Document Processing ---
         docs_file_path = test_file_structure["docs_file"]
-        if docs_file_path.exists():
-            content = docs_file_path.read_text()
 
-            # Initialize text splitter using tiktoken for accurate token counting
+        if docs_file_path.exists():
+            # Use TextLoader to load the document with proper metadata
+            loader = TextLoader(str(docs_file_path))
+            documents = loader.load()
             text_splitter = RecursiveCharacterTextSplitter.from_tiktoken_encoder(
                 chunk_size=8000,
                 chunk_overlap=500
             )
 
-            # Create initial documents
-            texts = [p.strip() for p in content.split('\n\n') if p.strip()]
-            documents = [Document(page_content=t) for t in texts]
+            # >>> documents[0].metadata
+            # {'source': '/private/var/folders/q_/d5r_s8wd02zdx6qmc5f_96mw0000gp/T/pytest-of-malcolm/pytest-99/test_query_success0/test_repo/docs/ai_docs/dpytest/dpytest_docs.tx
+            # t'}
 
             # Split documents into chunks
-            split_docs = text_splitter.split_documents(documents)
+            split_docs: list[Document] = text_splitter.split_documents(documents)
+
+            # Create a store using the real factory
+            store: SKLearnVectorStore = vectorstore_factory(
+                vector_store_cls=SKLearnVectorStore,
+                vector_store_kwargs={
+                    "persist_path": str(vectorstore_path),
+                    "serializer": "parquet",
+                },
+                embeddings=mock_openai_embeddings
+            ).from_documents(documents=split_docs, embedding=mock_openai_embeddings, persist_path=str(vectorstore_path), serializer="parquet")
 
             # Add split documents to the store
             if split_docs:
-                store.add_documents(split_docs)
+                # store.add_documents(split_docs)
+                store.from_documents(split_docs, mock_openai_embeddings)
 
                 # Persist the store
                 if hasattr(store, 'persist'):
                     store.persist()
 
+
+
         # --- Create AppContext ---
-        app_context_instance = AppContext(store=store)
+        app_context_instance = AppContext(store=store)  # type: ignore
 
         yield app_context_instance
 
