@@ -188,7 +188,7 @@ def mock_openai_embeddings() -> FakeEmbeddings:
 def fixture_app_context(
     test_file_structure: dict[str, Path],
     mock_openai_embeddings: FakeEmbeddings,
-    mocker: MockerFixture, # Keep mocker for potential future use or if other parts need it
+    mocker: MockerFixture,
 ) -> Iterator[AppContext]:
     """
     Provides a realistic AppContext for testing, leveraging test_file_structure.
@@ -196,8 +196,8 @@ def fixture_app_context(
     - Injects FakeEmbeddings globally for the test's scope.
     - Uses the real vectorstore_factory to create an SKLearnVectorStore instance,
       pointing to the temporary persistence path created by test_file_structure.
-    - Populates the store with documents read from the temporary docs file.
-    - Does NOT mock the retriever, allowing tests to interact with the real store logic.
+    - Splits and processes documents using RecursiveCharacterTextSplitter.
+    - Properly persists the store using parquet serialization.
     - Returns an AppContext containing the initialized store.
     - Resets the global embeddings provider upon teardown.
     """
@@ -208,55 +208,69 @@ def fixture_app_context(
         vectorstore_factory,
         AppContext,
     )
-    from langchain_core.documents import Document # For creating documents
+    from langchain_core.documents import Document
+    from langchain.text_splitter import RecursiveCharacterTextSplitter
+    import tiktoken
 
     # Inject fake embeddings for this test's scope
     original_embeddings = _EMBEDDINGS_PROVIDER
     set_embeddings_provider(mock_openai_embeddings)
 
+    # --- Store Initialization ---
+    vectorstore_path = test_file_structure["vectorstore_file"]
     try:
-        # --- Store Initialization ---
-        # Get the persistence path from the test_file_structure fixture
-        vectorstore_path = test_file_structure["vectorstore_file"]
 
         # Create a store using the real factory
-        store = vectorstore_factory(
+        store: SKLearnVectorStore = vectorstore_factory(
             vector_store_cls=SKLearnVectorStore,
             vector_store_kwargs={
                 "persist_path": str(vectorstore_path),
                 "serializer": "parquet",
-                # embeddings are handled by the factory via get_embeddings_provider
             },
-            # Pass the configured embeddings explicitly, though factory should pick it up
             embeddings=mock_openai_embeddings
         )
 
-        # --- Populate Store ---
-        # Read content from the temporary docs file
+        # --- Document Processing ---
         docs_file_path = test_file_structure["docs_file"]
         if docs_file_path.exists():
             content = docs_file_path.read_text()
-            # Simple split for example documents, adjust splitting as needed
+
+            # Initialize text splitter using tiktoken for accurate token counting
+            text_splitter = RecursiveCharacterTextSplitter.from_tiktoken_encoder(
+                chunk_size=8000,
+                chunk_overlap=500
+            )
+
+            # Create initial documents
             texts = [p.strip() for p in content.split('\n\n') if p.strip()]
             documents = [Document(page_content=t) for t in texts]
 
-            # Add documents to the store (SKLearnVectorStore.add_documents is sync)
-            if documents:
-                store.add_documents(documents)
-        else:
-            # Handle case where docs file might not exist, maybe log a warning
-            pass
+            # Split documents into chunks
+            split_docs = text_splitter.split_documents(documents)
 
+            # Add split documents to the store
+            if split_docs:
+                store.add_documents(split_docs)
+
+                # Persist the store
+                if hasattr(store, 'persist'):
+                    store.persist()
 
         # --- Create AppContext ---
-        # No mocking of as_retriever needed anymore
         app_context_instance = AppContext(store=store)
 
         yield app_context_instance
 
     finally:
-        # Restore original embeddings provider after the test
+        # Cleanup
         set_embeddings_provider(original_embeddings)
+
+        # Clean up persisted files if they exist
+        if vectorstore_path.exists():
+            try:
+                vectorstore_path.unlink()
+            except Exception as e:
+                print(f"Warning: Could not delete vectorstore file: {e}")
 
 # --- Logging Fixtures --- #
 
@@ -315,3 +329,8 @@ def mock_vectorstore_session_logging(monkeypatch: pytest.MonkeyPatch) -> None:
 
     # Apply the patch
     monkeypatch.setattr("oh_my_ai_docs.avectorstore_mcp.vectorstore_session", wrapped_session)
+
+# def count_tokens(text: str, model: str = "cl100k_base") -> int:
+#     """Count tokens in text using tiktoken."""
+#     encoder = tiktoken.get_encoding(model)
+#     return len(encoder.encode(text))

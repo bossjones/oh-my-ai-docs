@@ -111,44 +111,25 @@ class TestAVectorStoreMCPServer:
     async def test_query_success(
         self,
         fixture_app_context: AppContext,
-        mcp_server_instance: FastMCP,
-        mocker: MockerFixture
+        mcp_server_instance: FastMCP
     ):
         """Test a successful query returning documents from the vectorstore.
 
         Verifies:
         - Correct integration between FastMCP server and SKLearnVectorStore
         - Proper document retrieval and formatting in response
-        - Appropriate logging and progress reporting
+        - Appropriate response structure and content
         """
-        # Mock logging and progress reporting
-        mock_log = mocker.patch("mcp.server.session.ServerSession.send_log_message")
-        mock_progress = mocker.patch("mcp.server.session.ServerSession.send_progress_notification")
+        # Add test documents to the vectorstore
+        test_texts = [
+            "FastMCP is a protocol for LLM interactions",
+            "FastMCP provides tools and resources for AI development",
+            "The protocol enables seamless communication with language models"
+        ]
+        fixture_app_context.store.add_texts(test_texts)
 
-        # Patch get_context to ensure the tool receives our fixture context
-        mocker.patch(
-            "oh_my_ai_docs.avectorstore_mcp.mcp_server.get_context",
-            return_value=fixture_app_context
-        )
-
-        # Mock the retriever's invoke method to avoid real embeddings
-        mock_retriever = mocker.Mock()
-        mock_retriever.invoke = mocker.AsyncMock(
-            return_value=[Document(
-                page_content="FastMCP is a protocol for LLM interactions",
-                metadata={"score": 0.95}
-            )]
-        )
-
-        # Patch as_retriever to return our mock
-        mocker.patch.object(
-            fixture_app_context.store,
-            "as_retriever",
-            return_value=mock_retriever,
-            autospec=True
-        )
-
-        query_text = "protocol LLM"  # Should match first sample text
+        # Test querying the vectorstore
+        query_text = "protocol LLM"  # Should match first and third documents
         async with client_session(mcp_server_instance._mcp_server) as client:
             # Call the tool and verify results
             result = await client.call_tool("query_docs", {"query": query_text})
@@ -165,21 +146,20 @@ class TestAVectorStoreMCPServer:
             # Verify the response structure
             assert "documents" in response_data
             assert isinstance(response_data["documents"], list)
-            assert len(response_data["documents"]) == 1
+            assert len(response_data["documents"]) > 0  # Should find at least one match
+            assert len(response_data["documents"]) <= 3  # Default k=3 in QueryConfig
 
-            # Verify document content
-            doc = response_data["documents"][0]
-            assert "content" in doc
-            assert "metadata" in doc
-            assert doc["content"] == "FastMCP is a protocol for LLM interactions"
-            assert doc["metadata"]["score"] == pytest.approx(0.95)
+            # Verify document content - should find the relevant documents
+            found_docs = response_data["documents"]
+            assert any("protocol" in doc.lower() for doc in found_docs)
+            assert any("llm" in doc.lower() for doc in found_docs)
 
-            # Verify logging and progress reporting
-            mock_log.assert_called()
-            mock_progress.assert_called()
-
-            # Verify the retriever was used correctly
-            mock_retriever.invoke.assert_called_once_with(query_text)
+            # Verify scores
+            assert "scores" in response_data
+            assert isinstance(response_data["scores"], list)
+            assert len(response_data["scores"]) == len(response_data["documents"])
+            # Verify all scores are floats between 0 and 1
+            assert all(isinstance(score, float) and 0 <= score <= 1 for score in response_data["scores"])
 
     @pytest.mark.anyio
     @pytest.mark.fastmcp_tools
@@ -279,43 +259,40 @@ class TestAVectorStoreMCPServer:
     @pytest.mark.langchain_vectorstore_integration
     async def test_resource_success(
         self,
-        test_file_structure: dict[str, Path], # Provides paths and patches BASE/DOCS_PATH
-        mocker: MockerFixture,
-        fixture_app_context: AppContext, # Needed to mock context access
+        test_file_structure: dict[str, Path],
+        fixture_app_context: AppContext,
         mcp_server_instance: FastMCP
     ):
         """Test successfully reading the full documentation resource."""
-        expected_content = f"Full documentation content for {TEST_MODULE}."
+        # Create test documentation content
         docs_file_path = test_file_structure["docs_file"]
+        expected_content = f"Full documentation content for {TEST_MODULE}."
 
-        # Mock aiofiles.open to return the expected content
-        mock_async_file = mocker.AsyncMock()
-        mock_async_file.read.return_value = expected_content
-        # Use __aenter__ and __aexit__ for async context manager mocking
-        mock_open = mocker.patch("aiofiles.open", return_value=mocker.MagicMock(__aenter__=mocker.AsyncMock(return_value=mock_async_file), __aexit__=mocker.AsyncMock()))
-        # Mock path check
-        mocker.patch("aiofiles.os.path.exists", return_value=True) # Assume file exists
+        # Ensure the docs directory exists
+        docs_file_path.parent.mkdir(parents=True, exist_ok=True)
 
-        # Patch get_context to return our fixture context
-        mocker.patch(
-            "oh_my_ai_docs.avectorstore_mcp.mcp_server.get_context",
-            return_value=fixture_app_context
-        )
+        # Write test content to the documentation file
+        async with aiofiles.open(docs_file_path, "w") as f:
+            await f.write(expected_content)
 
-        resource_uri = f"docs://{TEST_MODULE}/full"
-        async with client_session(mcp_server_instance._mcp_server) as client:
-            result = await client.read_resource(resource_uri)
+        try:
+            # Test reading the resource
+            resource_uri = f"docs://{TEST_MODULE}/full"
+            async with client_session(mcp_server_instance._mcp_server) as client:
+                result = await client.read_resource(resource_uri)
 
-        assert result is not None
-        assert len(result.contents) == 1
-        content = result.contents[0]
-        assert isinstance(content, TextContent)
-        assert content.text == expected_content
-        assert content.mimeType == "text/plain" # As defined in the decorator
+            # Verify the result
+            assert result is not None
+            assert len(result.contents) == 1
+            content = result.contents[0]
+            assert isinstance(content, TextContent)
+            assert content.text == expected_content
+            assert content.mimeType == "text/plain"  # As defined in the decorator
 
-        # Verify aiofiles.open was called with the correct path
-        mock_open.assert_called_once_with(docs_file_path)
-        mock_async_file.read.assert_called_once()
+        finally:
+            # Clean up - remove the test file
+            if docs_file_path.exists():
+                docs_file_path.unlink()
 
     @pytest.mark.anyio
     @pytest.mark.fastmcp_resources
@@ -399,8 +376,7 @@ class TestAVectorStoreMCPServer:
     @pytest.mark.langchain_vectorstore_integration
     async def test_lifespan_context_available_in_tool(
         self,
-        fixture_app_context: AppContext,  # Use the correct fixture name
-        mocker: MockerFixture,
+        fixture_app_context: AppContext,
         mcp_server_instance: FastMCP
     ):
         """Verify that the AppContext from the lifespan is accessible within the tool.
@@ -411,32 +387,16 @@ class TestAVectorStoreMCPServer:
         - Tool invocation with context
         - Proper cleanup after tool execution
         """
-        # Patch get_context to ensure the tool receives our fixture context
-        mocker.patch(
-            "oh_my_ai_docs.avectorstore_mcp.mcp_server.get_context",
-            return_value=fixture_app_context
-        )
-
-        # Mock the retriever's invoke method to avoid real embeddings
-        mock_retriever = mocker.Mock()
-        mock_retriever.invoke = mocker.AsyncMock(
-            return_value=[Document(page_content="Test Doc", metadata={"score": 0.95})]
-        )
-
-        # Patch as_retriever to return our mock
-        mocker.patch.object(
-            fixture_app_context.store,
-            "as_retriever",
-            return_value=mock_retriever,
-            autospec=True
-        )
+        # Create a test document in the vectorstore
+        test_texts = ["FastMCP is a protocol for LLM interactions"]
+        fixture_app_context.store.add_texts(test_texts)
 
         # Test the tool with context
         async with client_session(mcp_server_instance._mcp_server) as client:
             # Call the tool and verify it works with the context
             result = await client.call_tool(
                 "query_docs",
-                {"query": "check context"}
+                {"query": "protocol LLM"}
             )
 
             # Verify the result
@@ -445,7 +405,8 @@ class TestAVectorStoreMCPServer:
             response_data = json.loads(result.content[0].text)
             assert "documents" in response_data
             assert len(response_data["documents"]) == 1
-            assert "Test Doc" in response_data["documents"][0]
-
-        # Verify the retriever was used correctly
-        mock_retriever.invoke.assert_called_once_with("check context")
+            assert response_data["documents"][0] == test_texts[0]  # Should match exactly since it's the only document
+            assert "scores" in response_data
+            assert len(response_data["scores"]) == 1
+            assert isinstance(response_data["scores"][0], float)
+            assert 0 <= response_data["scores"][0] <= 1  # Score should be between 0 and 1

@@ -255,7 +255,7 @@ def vectorstore_factory(
     embeddings: Embeddings | None = None,
     vector_store_cls: type[VectorStore] = SKLearnVectorStore,
     vector_store_kwargs: dict[str, Any] | None = None,
-) -> VectorStore:
+) -> SKLearnVectorStore:
     """
     Factory function to create or return a vector store.
 
@@ -341,18 +341,17 @@ async def query_tool(query: str) -> DocumentResponse:
         TimeoutError: If the query operation takes longer than 30 seconds
     """
     ctx: Context[ServerSession, object] = mcp_server.get_context()
-    import bpdb
+    # import bpdb
 
-    bpdb.set_trace()
+    # bpdb.set_trace()
     if not query.strip():
-        # await ctx.error("Query cannot be empty")
         raise ValueError("Query cannot be empty")
 
     config = QueryConfig()
 
     vectorstore_path = get_vectorstore_path()
 
-    state: AppContext = cast(AppContext, ctx.store)
+    state: AppContext = cast(AppContext, ctx.request_context.lifespan_context)
 
     try:
         # await ctx.info(f"Querying vectorstore with k={config.k}")
