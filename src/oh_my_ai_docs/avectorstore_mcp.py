@@ -334,7 +334,13 @@ mcp_server = FastMCP(f"{args.module}-avectorstore-mcp".lower(), lifespan=vectors
     name="query_docs",
     description="Search through module documentation using semantic search to find relevant information based on your query",
 )
-async def query_tool(query: str) -> DocumentResponse | list[TextContent]:
+async def query_tool(
+    query: str = Field(
+        description="The query string to search for in the documentation",
+        examples=["What is the best way to test discord bots with dpytest?"],
+        min_length=1,
+    ),
+) -> DocumentResponse | list[TextContent]:
     """
     Query the documentation using a retriever.
 
@@ -395,7 +401,11 @@ async def query_tool(query: str) -> DocumentResponse | list[TextContent]:
     description="Retrieves the full documentation content for a specified module (discord, dpytest, or langgraph). Returns the raw text content from the module's documentation file.",
     mime_type="text/plain",
 )
-async def get_all_docs(module: str) -> str:
+async def get_all_docs(
+    module: str = Field(
+        description="The module name (discord, dpytest, or langgraph)", examples=["discord", "dpytest", "langgraph"]
+    ),
+) -> str:
     """
     Get all the documentation for the specified module. Returns the contents of the {module}_docs.txt file,
     which contains a curated set of documentation. This is useful for a comprehensive response to questions.
