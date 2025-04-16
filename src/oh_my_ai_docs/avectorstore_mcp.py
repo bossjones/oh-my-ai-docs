@@ -181,13 +181,10 @@ async def get_config_info():
 
 async def list_vectorstores():
     """Search for and list all .parquet files in the docs directory"""
-    # logger.info("Listing available vector stores")
-
     # Find all .parquet files recursively
     parquet_files: list[Path] = list(DOCS_PATH.glob("**/*.parquet"))
 
     if not parquet_files:
-        # logger.info("No vector stores found.")
         return
 
     # Group by module
@@ -200,16 +197,12 @@ async def list_vectorstores():
 
     # Log the results
     for module, files in stores_by_module.items():
-        # logger.info(f"Module: {module}")
         for file in files:
             try:
                 relative_path = file.relative_to(BASE_PATH)
             except ValueError:
                 # If file is not under BASE_PATH, show path relative to DOCS_PATH parent
                 relative_path = file.relative_to(DOCS_PATH.parent)
-            # logger.info(f"  - {relative_path}")
-
-    # logger.info(f"Total vector stores found: {len(parquet_files)}")
 
 
 async def generate_mcp_config() -> dict[str, dict[str, Any]]:
@@ -230,7 +223,6 @@ async def generate_mcp_config() -> dict[str, dict[str, Any]]:
             "args": ["run", "--directory", str(BASE_PATH), f"./{relative_script_path}", "--module", module],
         }
 
-    # logger.info("MCP configuration generated successfully")
     return mcp_config
 
 
@@ -239,7 +231,6 @@ async def save_mcp_config(config: dict[str, dict[str, Any]]) -> None:
     save_path = BASE_PATH / "mcp.json"
     async with aiofiles.open(save_path, "w") as f:
         await f.write(json.dumps(config, indent=2))
-    # logger.info(f"Configuration saved to {save_path}")
 
 
 # Define validation models
@@ -257,18 +248,6 @@ class QueryConfig(BaseModel):
 
 def get_vectorstore_path() -> Path:
     return DOCS_PATH / args.module / "vectorstore" / f"{args.module}_vectorstore.parquet"
-
-
-# def vectorstore_factory(store: SKLearnVectorStore | None = None, embeddings: OpenAIEmbeddings | None = None) -> SKLearnVectorStore:
-#     if store:
-#         return store
-#     else:
-#         vectorstore_path = get_vectorstore_path()
-#         return SKLearnVectorStore(
-#             embedding=OpenAIEmbeddings(model="text-embedding-3-large"),
-#             persist_path=str(vectorstore_path),
-#             serializer="parquet",
-#         )
 
 
 def vectorstore_factory(
@@ -310,28 +289,6 @@ def vectorstore_factory(
     vector_store_kwargs["embedding"] = embeddings
 
     return vector_store_cls(**vector_store_kwargs)
-
-
-# @asynccontextmanager
-# async def vectorstore_session(server: FastMCP) -> AsyncIterator[AppContext]:
-#     """Context manager for vectorstore operations."""
-#     vectorstore_path = get_vectorstore_path()
-#     try:
-#         # logger.debug(f"Opening vectorstore session: {vectorstore_path}")
-#         store = SKLearnVectorStore(
-#             embedding=OpenAIEmbeddings(model="text-embedding-3-large"),
-#             persist_path=str(vectorstore_path),
-#             serializer="parquet",
-#         )
-#         yield AppContext(store=store)
-#         # logger.debug("Vectorstore session completed")
-#     except Exception as e:
-#         # logger.error(f"Error in vectorstore session: {e}", exc_info=True)
-#         raise
-#     finally:
-#         # Cleanup if needed
-#         # logger.debug("Vectorstore session cleanup complete")
-#         pass
 
 
 @asynccontextmanager
@@ -384,26 +341,28 @@ async def query_tool(query: str) -> DocumentResponse:
         TimeoutError: If the query operation takes longer than 30 seconds
     """
     ctx: Context[ServerSession, object] = mcp_server.get_context()
+    import bpdb
+
+    bpdb.set_trace()
     if not query.strip():
-        await ctx.error("Query cannot be empty")
+        # await ctx.error("Query cannot be empty")
         raise ValueError("Query cannot be empty")
 
     config = QueryConfig()
 
     vectorstore_path = get_vectorstore_path()
 
-    state: AppContext = cast(AppContext, ctx.request_context.lifespan_context)
-    await ctx.debug(f"state: {state}")
+    state: AppContext = cast(AppContext, ctx.store)
 
     try:
-        await ctx.info(f"Querying vectorstore with k={config.k}")
+        # await ctx.info(f"Querying vectorstore with k={config.k}")
 
         # Get the retriever from the store, not from state directly
         retriever: VectorStoreRetriever = state.store.as_retriever(search_kwargs={"k": config.k})
 
         relevant_docs: list[Document] = await asyncio.to_thread(retriever.invoke, query)
 
-        await ctx.info(f"Retrieved {len(relevant_docs)} relevant documents")
+        # await ctx.info(f"Retrieved {len(relevant_docs)} relevant documents")
 
         documents: list[str] = []
         scores: list[float] = []
@@ -414,17 +373,12 @@ async def query_tool(query: str) -> DocumentResponse:
 
             documents.append(doc.page_content)
             scores.append(doc.metadata.get("score", 1.0) if hasattr(doc, "metadata") else 1.0)
-            await ctx.report_progress(i + 1, len(relevant_docs))
 
         return DocumentResponse(documents=documents, scores=scores, total_found=len(relevant_docs))
 
     except TimeoutError:
-        await ctx.error("Query timed out")
-        # logger.error("Query operation timed out after 30 seconds")
         raise ToolError("Query operation timed out after 30 seconds")
     except Exception as e:
-        await ctx.error(f"Query failed: {e!s}")
-        # logger.error(f"Failed to query vectorstore: {e!s}", exc_info=True)
         raise ToolError(f"Failed to query vectorstore: {e!s}")
 
 
@@ -451,60 +405,36 @@ async def get_all_docs(module: str) -> str:
     ctx: Context[ServerSession, object] = mcp_server.get_context()
     # import bpdb; bpdb.set_trace()
     try:
-        await ctx.info(f"Retrieving documentation for module: {module}")
-
         if module != args.module:
-            await ctx.error(f"Module mismatch: requested module '{module}', server module '{args.module}'")
             raise ResourceError(f"Requested module '{module}' does not match server module '{args.module}'")
 
         # Local path to the documentation
         doc_path = DOCS_PATH / module / f"{module}_docs.txt"
 
         if not doc_path.exists():
-            await ctx.error(f"Documentation file not found: module '{module}', path '{doc_path}'")
+            # await ctx.error(f"Documentation file not found: module '{module}', path '{doc_path}'")
             raise ResourceError(f"Documentation file not found for module: {module}")
 
         async with aiofiles.open(doc_path) as file:
             content = await file.read()
-            await ctx.info(f"Successfully read documentation: module '{module}', size {len(content)}")
+
             return content
 
     except ResourceError:
         raise
     except Exception as e:
-        # logger.error("Error reading documentation", extra={"doc_module": module, "error": str(e)}, exc_info=True)
         raise ResourceError(f"Error reading documentation file: {e}")
 
 
 if __name__ == "__main__":
     import asyncio
 
-    # async def main():
     try:
         if args.list_vectorstores:
             pass
-            # await list_vectorstores()
-            # logger.info("Vectorstore listing completed")
-        # elif args.generate_mcp_config:
-        #     config = await generate_mcp_config()
-        #     if args.save:
-        #         await save_mcp_config(config)
-        # elif args.dry_run:
-        #     config = await get_config_info()
-        #     logger.info("MCP Server Configuration:")
-        #     logger.info(json.dumps(config, indent=2))
-        #     logger.info("Dry run completed. Use without --dry-run to start the server.")
         else:
             # Initialize and run the server
-            # logger.info(f"Starting MCP server for {args.module} documentation...")
             mcp_server.run(transport="stdio")
     except Exception as e:
-        # logger.error(f"Error in main execution: {e}", exc_info=True)
-        # sys.exit(1)
-        # except Exception as e:
-        # logger.error(f"Error starting server: {e}")
         traceback.print_exc(file=sys.stderr)
         sys.exit(1)
-
-    # Run the main async function
-    # asyncio.run(main())
