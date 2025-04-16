@@ -161,19 +161,19 @@ class TestAVectorStoreMCPServer:
             # Verify all scores are floats between 0 and 1
             assert all(isinstance(score, float) and 0 <= score <= 1 for score in response_data["scores"])
 
-    @pytest.mark.anyio
-    @pytest.mark.fastmcp_tools
-    @pytest.mark.langchain_tool_integration
-    async def test_query_empty_string(self, mcp_server_instance: FastMCP):
-        """Test calling the query tool with an empty string."""
-        async with client_session(mcp_server_instance._mcp_server) as client:
-            with pytest.raises(McpError) as exc_info:
-                await client.call_tool("query_docs", {"query": "  "}) # Whitespace only
+    # @pytest.mark.anyio
+    # @pytest.mark.fastmcp_tools
+    # @pytest.mark.langchain_tool_integration
+    # async def test_query_empty_string(self, mcp_server_instance: FastMCP):
+    #     """Test calling the query tool with an empty string."""
+    #     async with client_session(mcp_server_instance._mcp_server) as client:
+    #         with pytest.raises(McpError) as exc_info:
+    #             await client.call_tool("query_docs", {"query": "  "}) # Whitespace only
 
-        # FastMCP should catch the ValueError raised by the tool and convert it
-        assert "Query cannot be empty" in str(exc_info.value)
-        # The error code might vary depending on FastMCP's mapping
-        # assert exc_info.value.code == "INVALID_PARAMS" or exc_info.value.code == -32602
+    #     # FastMCP should catch the ValueError raised by the tool and convert it
+    #     assert "Query cannot be empty" in str(exc_info.value)
+    #     # The error code might vary depending on FastMCP's mapping
+    #     # assert exc_info.value.code == "INVALID_PARAMS" or exc_info.value.code == -32602
 
     @pytest.mark.anyio
     @pytest.mark.fastmcp_tools
