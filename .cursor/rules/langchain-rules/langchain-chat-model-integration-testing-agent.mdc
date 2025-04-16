@@ -1,0 +1,118 @@
+---
+description: This rule defines essential standards for implementing chat model integration tests in LangChain. It should be applied when: (1) Creating new chat model integrations that require connection to external services, (2) Updating existing integration tests, (3) Reviewing integration test code, or (4) Diagnosing integration test failures in CI/CD pipelines. Following these standards ensures comprehensive testing across different model capabilities, proper API connectivity, and consistent test patterns for all LangChain chat model implementations.
+globs:
+alwaysApply: false
+---
+# LangChain Chat Model Integration Testing Standards
+
+## Critical Rules
+
+- **Subclassing**: ALWAYS subclass `ChatModelIntegrationTests` for integration tests.
+- **Required Properties**:
+  - `chat_model_class`: The class of the chat model to be tested.
+  - `chat_model_params`: A dictionary of parameters for initializing the chat model.
+- **Test Placement**: Place integration tests in the `tests/integration_tests/` directory.
+- **Feature Support**: Specify supported optional features by overriding the relevant properties:
+  - `has_tool_calling`
+  - `has_tool_choice`
+  - `has_structured_output`
+  - `structured_output_kwargs`
+  - `supports_json_mode`
+  - `supports_image_inputs`
+  - `supports_video_inputs`
+  - `supports_anthropic_inputs`
+  - `supports_image_tool_message`
+  - `returns_usage_metadata`
+  - `supported_usage_metadata_details`
+- **Test Execution**: Run integration tests with:
+  ```bash
+  uv run pytest --asyncio-mode=auto tests/integration_tests
+  ```
+
+- **Dependency Management**: Pin the version of `langchain-tests` in your project dependencies to avoid CI/CD pipeline breakage.
+
+## Example
+
+```python
+# tests/integration_tests/test_chat_models.py
+from typing import Type
+
+from langchain_mychatmodel.chat_models import MyChatModel
+from langchain_tests.integration_tests import ChatModelIntegrationTests
+
+class TestMyChatModelIntegration(ChatModelIntegrationTests):
+    @property
+    def chat_model_class(self) -> Type[MyChatModel]:
+        return MyChatModel
+
+    @property
+    def chat_model_params(self) -> dict:
+        return {
+            "model": "my-model-001",
+            "temperature": 0,
+        }
+
+    @property
+    def has_tool_calling(self) -> bool:
+        return True
+
+    @property
+    def supports_image_inputs(self) -> bool:
+        return False
+
+    @property
+    def returns_usage_metadata(self) -> bool:
+        return True
+```
+
+
+## `ChatModelIntegrationTests` API Reference
+
+### Required Properties
+
+- `chat_model_class`: The chat model class to be tested.
+- `chat_model_params`: Parameters to initialize the chat model for testing.
+
+### Optional Properties
+
+- `has_tool_calling`: Indicates if the model supports tool calling. Defaults to checking if `bind_tools` is overridden.
+- `has_tool_choice`: Indicates if the model supports forcing tool calling via a `tool_choice` parameter.
+- `tool_choice_value`: Value to use for tool choice in tests. Deprecated since version 0.3.15 and will be removed in version 0.3.20.
+- `has_structured_output`: Indicates if the model supports structured output.
+- `structured_output_kwargs`: Additional kwargs for `with_structured_output`.
+- `supports_json_mode`: Indicates if the model supports JSON mode in `with_structured_output`.
+- `supports_image_inputs`: Indicates if the model supports image inputs. Defaults to `False`.
+- `supports_video_inputs`: Indicates if the model supports video inputs. Defaults to `False`.
+- `supports_anthropic_inputs`: Indicates if the model supports Anthropic-style inputs.
+- `supports_image_tool_message`: Indicates if the model supports `ToolMessage` with image content.
+- `returns_usage_metadata`: Indicates if the model returns usage metadata on invoke and streaming responses.
+- `supported_usage_metadata_details`: Controls what usage metadata details are emitted in both invoke and stream.
+
+### Key Test Methods
+
+- `test_invoke()`: Tests basic model invocation.
+- `test_stream()`: Tests streaming functionality.
+- `test_batch()`: Tests batch inference.
+- `test_astream()`: Tests async streaming.
+- `test_ainvoke()`: Tests async invocation.
+- `test_abatch()`: Tests async batch processing.
+- `test_conversation()`: Tests multi-turn conversation handling.
+- `test_double_messages_conversation()`: Tests handling of double-message conversations.
+- `test_tool_calling()`: Tests tool calling capability.
+- `test_tool_calling_async()`: Tests async tool calling capability.
+- `test_tool_calling_with_no_arguments()`: Tests tool calling with no arguments.
+- `test_tool_choice()`: Tests forcing tool calling via `tool_choice`.
+- `test_usage_metadata()`: Tests usage metadata reporting.
+- `test_usage_metadata_streaming()`: Tests usage metadata reporting in streaming mode.
+- `test_structured_output()`: Tests structured output functionality.
+- `test_structured_output_async()`: Tests async structured output functionality.
+- `test_structured_output_optional_param()`: Tests structured output with optional parameters.
+- `test_structured_output_pydantic_2_v1()`: Tests structured output using Pydantic v1.
+- `test_json_mode()`: Tests structured output via JSON mode.
+- `test_image_inputs()`: Tests image input handling.
+- `test_image_tool_message()`: Tests `ToolMessage` with image inputs.
+- `test_anthropic_inputs()`: Tests processing of Anthropic-style message histories.
+- `test_agent_loop()`: Tests support for a simple ReAct agent loop.
+- `test_stop_sequence()`: Tests handling of the `stop` parameter.
+- `test_message_with_name()`: Tests handling of `HumanMessage` with `name` field.
+- `test_bind_runnables_as_tools()`: Tests tool calls for tools derived from LangChain run

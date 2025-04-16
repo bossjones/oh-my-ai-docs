@@ -21,7 +21,7 @@ First, let's install 2 dependencies:
 > **Note**
 > Because added tests in new versions of `langchain-tests` can break your CI/CD pipelines, we recommend pinning the version of `langchain-tests` to avoid unexpected changes.
 
-### Poetry
+### UV
 
 ```bash
 uv add langchain-core

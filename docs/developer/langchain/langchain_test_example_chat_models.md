@@ -20,7 +20,7 @@ Recommended to pin to the latest version: ![latest](https://img.shields.io/pypi/
 > **Note**
 > Because added tests in new versions of `langchain-tests` can break your CI/CD pipelines, we recommend pinning the version of `langchain-tests` to avoid unexpected changes.
 
-### Poetry
+### UV
 
 If you followed the [previous guide](https://python.langchain.com/v0.1/docs/integrations/how_to_guides/integration_package/), you should already have these dependencies installed!
 
@@ -151,7 +151,7 @@ class TestChatParrotLinkIntegration(ChatModelIntegrationTests):
 
 You can run these with the following commands from your project root:
 
-### Poetry
+### UV
 
 ```bash
 # run unit tests without network access
