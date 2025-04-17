@@ -173,7 +173,7 @@ if command -v gh >/dev/null; then
 
     echo "-- Creating pull request --"
     PR_TITLE="Prepare for release of ${CURRENT_VERSION} to ${VERSION}"
-    PR_BODY="Release preparation triggered by @$(git config user.name). Once merged, create a GitHub release for \`${VERSION}\` to publish."
+    PR_BODY="Release preparation triggered by @$(git config user.name). Once merged, create a GitHub release for '${VERSION}' to publish."
 
     echo "[running] gh pr create --title \"${PR_TITLE}\" --body \"${PR_BODY}\" --assignee \"@me\" --label \"release\" --fill --base main --head \"${RELEASE_BRANCH}\""
     gh pr create \
