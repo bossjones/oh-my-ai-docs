@@ -13,6 +13,7 @@ llmstxt-dpytest:
     https://dpytest.readthedocs.io/en/latest/modules/utils.html \
     https://dpytest.readthedocs.io/en/latest/modules/verify.html \
     https://dpytest.readthedocs.io/en/latest/modules/websocket.html \
+    https://dpytest.readthedocs.io/en/latest/tutorials/using_pytest.html \
     --max-depth 3 \
     --llm-name claude-3-7-sonnet-latest \
     --llm-provider anthropic \
@@ -93,6 +94,12 @@ llmstxt-discord:
     https://github.com/Rapptz/discord.py/tree/v2.5.2/examples \
     https://discordpy.readthedocs.io/en/stable/faq.html \
     https://discordpy.readthedocs.io/en/stable/genindex.html \
+    https://discordpy.readthedocs.io/en/stable/ext/commands/index.html \
+    https://discordpy.readthedocs.io/en/stable/ext/tasks/index.html \
+    https://discordpy.readthedocs.io/en/stable/interactions/api.html \
+    https://discordpy.readthedocs.io/en/stable/ext/commands/api.html \
+    https://discordpy.readthedocs.io/en/stable/ext/tasks/index.html \
+    https://discordpy.readthedocs.io/en/stable/migrating.html \
     --max-depth 3 \
     --llm-name claude-3-7-sonnet-latest \
     --llm-provider anthropic \

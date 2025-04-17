@@ -1,4 +1,43 @@
 #!/usr/bin/env python3
+"""
+Build a local vector store from module documentation for semantic search and retrieval.
+
+This script creates a searchable vector store from documentation of specified modules
+(like LangGraph, Discord.py, etc.) by:
+1. Fetching documentation from predefined URLs for each module
+2. Processing and cleaning the HTML content
+3. Splitting documents into semantically meaningful chunks
+4. Converting text chunks into vector embeddings using OpenAI's text-embedding-3-large model
+5. Storing the embeddings in a local SKLearnVectorStore for efficient retrieval
+
+The resulting vector store enables semantic search capabilities, allowing for
+context-aware documentation lookups and enhanced AI assistance.
+
+Key Features:
+- Supports multiple documentation sources (LangGraph, Discord.py, dpytest, etc.)
+- Uses BeautifulSoup for clean HTML content extraction
+- Implements efficient document chunking with tiktoken-based text splitting
+- Creates persistent vector stores using SKLearn for local storage
+- Includes dry-run capability for testing configuration
+
+Usage:
+    python build_llmstxt_context.py --module [module_name]
+    python build_llmstxt_context.py --module langgraph --dry-run
+
+Available modules:
+    - langgraph
+    - langchain
+    - dpytest
+    - discord
+
+Dependencies:
+    - tiktoken: For token counting and text splitting
+    - beautifulsoup4: For HTML parsing
+    - langchain: For document processing and vector store creation
+    - openai: For text embeddings
+    - scikit-learn: For vector store backend
+"""
+
 from __future__ import annotations
 
 import argparse
@@ -45,6 +84,7 @@ MODULE_URLS: dict[str, list[str]] = {
         "https://dpytest.readthedocs.io/en/latest/modules/utils.html",
         "https://dpytest.readthedocs.io/en/latest/modules/verify.html",
         "https://dpytest.readthedocs.io/en/latest/modules/websocket.html",
+        "https://dpytest.readthedocs.io/en/latest/tutorials/using_pytest.html",
     ],
     "discord": [
         "https://discordpy.readthedocs.io/en/stable/index.html",
@@ -56,6 +96,12 @@ MODULE_URLS: dict[str, list[str]] = {
         "https://github.com/Rapptz/discord.py/tree/v2.5.2/examples",
         "https://discordpy.readthedocs.io/en/stable/faq.html",
         "https://discordpy.readthedocs.io/en/stable/genindex.html",
+        "https://discordpy.readthedocs.io/en/stable/ext/commands/index.html",
+        "https://discordpy.readthedocs.io/en/stable/ext/tasks/index.html",
+        "https://discordpy.readthedocs.io/en/stable/interactions/api.html",
+        "https://discordpy.readthedocs.io/en/stable/ext/commands/api.html",
+        "https://discordpy.readthedocs.io/en/stable/ext/tasks/index.html",
+        "https://discordpy.readthedocs.io/en/stable/migrating.html"
     ],
     # Add more modules as needed
 }

@@ -104,3 +104,31 @@ avectorstore-discord:
 [group('vectorstore')]
 avectorstore-discord-inspector:
     npx -y @modelcontextprotocol/inspector uv run ./src/oh_my_ai_docs/avectorstore_mcp.py --module discord --stdio --debug
+
+# Build sklearn vectorstore context for discord module
+[group('vectorstore')]
+avectorstore-build-context-discord:
+    uv run ./scripts/build_llmstxt_context.py --module discord
+
+# Build sklearn vectorstore context for langgraph module
+[group('vectorstore')]
+avectorstore-build-context-langgraph:
+    uv run ./scripts/build_llmstxt_context.py --module langgraph
+
+# Build sklearn vectorstore context for langchain module
+[group('vectorstore')]
+avectorstore-build-context-langchain:
+    uv run ./scripts/build_llmstxt_context.py --module langchain
+
+# Build sklearn vectorstore context for dpytest module
+[group('vectorstore')]
+avectorstore-build-context-dpytest:
+    uv run ./scripts/build_llmstxt_context.py --module dpytest
+
+# Build all sklearn vectorstore contexts
+[group('vectorstore')]
+avectorstore-build-context-all:
+    just avectorstore-build-context-discord
+    just avectorstore-build-context-langgraph
+    just avectorstore-build-llmstxt-langchain
+    just avectorstore-build-llmstxt-dpytest
