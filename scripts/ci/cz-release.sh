@@ -43,6 +43,8 @@ if ! gh auth status 2>/dev/null; then
     exit 1
 fi
 
+git push origin --tags || true
+
 echo "-- Determining current version --"
 VERSION=$(uv run cz version -p | tr -d '\n')
 if [ -z "${VERSION}" ]; then
