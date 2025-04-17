@@ -166,6 +166,11 @@ if command -v gh >/dev/null; then
         exit 1
     fi
 
+    echo "-- Creating label release --"
+    echo "[running] gh label create release --description \"Label for marking official releases\" --color 28a745 || true"
+    gh label create release --description "Label for marking official releases" --color 28a745 || true
+
+
     echo "-- Creating pull request --"
     PR_TITLE="Prepare for release of ${CURRENT_VERSION} to ${VERSION}"
     PR_BODY="Release preparation triggered by @$(git config user.name).\n\nOnce merged, create a GitHub release for \`${VERSION}\` to publish."
