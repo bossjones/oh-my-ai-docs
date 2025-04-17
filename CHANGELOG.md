@@ -1,3 +1,21 @@
+## v0.3.0 (2025-04-17)
+
+### Feat
+
+- add release preparation and GitHub release scripts
+- add GitHub label creation for official releases in release preparation script
+
+### Refactor
+
+- enhance query_tool and get_all_docs function signatures with detailed Field descriptions
+- update MCP server configuration and entry points
+- enhance documentation and type hints in build_llmstxt_context.py
+- comment out unused test cases in test_aserver.py
+- enhance vectorstore and query_tool return types, improve error handling
+- update test assertions and enhance query validation in test_aserver.py
+- update QueryConfig default value and enhance test fixture
+- remove unused logging fixture and comment out test case
+
 ## v0.2.0 (2025-04-16)
 
 ### Feat
