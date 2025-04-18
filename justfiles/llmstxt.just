@@ -42,7 +42,7 @@ llmstxt-langgraph:
     https://python.langchain.com/docs/get_started/introduction/ \
     https://python.langchain.com/docs/modules/ \
     https://python.langchain.com/docs/use_cases/ \
-    --max-depth 5 \
+    --max-depth 3 \
     --llm-name claude-3-7-sonnet-latest \
     --llm-provider anthropic \
     --project-dir docs/ai_docs/langgraph

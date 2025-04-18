@@ -159,6 +159,9 @@ plugins:
   - coverage: # Adds test coverage reporting
       page_path: coverage # Path for coverage pages
       html_report_dir: htmlcov # Directory for HTML coverage reports
+  - mkdocs-simple-hooks:
+      hooks:
+        on_post_build: "docs.hooks:copy_txt_files"
 
 # Markdown extension configuration
 markdown_extensions:
