@@ -13,7 +13,8 @@ llmstxt-dpytest:
     https://dpytest.readthedocs.io/en/latest/modules/utils.html \
     https://dpytest.readthedocs.io/en/latest/modules/verify.html \
     https://dpytest.readthedocs.io/en/latest/modules/websocket.html \
-    --max-depth 3 \
+    https://dpytest.readthedocs.io/en/latest/tutorials/using_pytest.html \
+    --max-depth 5 \
     --llm-name claude-3-7-sonnet-latest \
     --llm-provider anthropic \
     --project-dir docs/ai_docs/dpytest
@@ -23,7 +24,7 @@ llmstxt-dpytest:
 llmstxt-dpytest-update:
     uv run llmstxt-architect \
     --existing-llms-file docs/ai_docs/dpytest/llms.txt \
-    --max-depth 3 \
+    --max-depth 5 \
     --llm-name claude-3-7-sonnet-latest \
     --llm-provider anthropic \
     --update-descriptions-only \
@@ -51,7 +52,7 @@ llmstxt-langgraph:
 llmstxt-langgraph-update:
     uv run llmstxt-architect \
     --existing-llms-file docs/ai_docs/langgraph/llms.txt \
-    --max-depth 3 \
+    --max-depth 5 \
     --llm-name claude-3-7-sonnet-latest \
     --llm-provider anthropic \
     --update-descriptions-only \
@@ -64,7 +65,7 @@ llmstxt-langchain:
     --urls https://python.langchain.com/docs/get_started/introduction/ \
     https://python.langchain.com/docs/modules/ \
     https://python.langchain.com/docs/use_cases/ \
-    --max-depth 3 \
+    --max-depth 5 \
     --llm-name claude-3-7-sonnet-latest \
     --llm-provider anthropic \
     --project-dir docs/ai_docs/langchain
@@ -74,7 +75,7 @@ llmstxt-langchain:
 llmstxt-langchain-update:
     uv run llmstxt-architect \
     --existing-llms-file docs/ai_docs/langchain/llms.txt \
-    --max-depth 3 \
+    --max-depth 5 \
     --llm-name claude-3-7-sonnet-latest \
     --llm-provider anthropic \
     --update-descriptions-only \
@@ -93,7 +94,13 @@ llmstxt-discord:
     https://github.com/Rapptz/discord.py/tree/v2.5.2/examples \
     https://discordpy.readthedocs.io/en/stable/faq.html \
     https://discordpy.readthedocs.io/en/stable/genindex.html \
-    --max-depth 3 \
+    https://discordpy.readthedocs.io/en/stable/ext/commands/index.html \
+    https://discordpy.readthedocs.io/en/stable/ext/tasks/index.html \
+    https://discordpy.readthedocs.io/en/stable/interactions/api.html \
+    https://discordpy.readthedocs.io/en/stable/ext/commands/api.html \
+    https://discordpy.readthedocs.io/en/stable/ext/tasks/index.html \
+    https://discordpy.readthedocs.io/en/stable/migrating.html \
+    --max-depth 5 \
     --llm-name claude-3-7-sonnet-latest \
     --llm-provider anthropic \
     --project-dir docs/ai_docs/discord
@@ -103,7 +110,7 @@ llmstxt-discord:
 llmstxt-discord-update:
     uv run llmstxt-architect \
     --existing-llms-file docs/ai_docs/discord/llms.txt \
-    --max-depth 3 \
+    --max-depth 5 \
     --llm-name claude-3-7-sonnet-latest \
     --llm-provider anthropic \
     --update-descriptions-only \
