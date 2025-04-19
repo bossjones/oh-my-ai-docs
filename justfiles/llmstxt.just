@@ -52,7 +52,7 @@ llmstxt-langgraph:
 llmstxt-langgraph-update:
     uv run llmstxt-architect \
     --existing-llms-file docs/ai_docs/langgraph/llms.txt \
-    --max-depth 5 \
+    --max-depth 3 \
     --llm-name claude-3-7-sonnet-latest \
     --llm-provider anthropic \
     --update-descriptions-only \
