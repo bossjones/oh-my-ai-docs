@@ -32,3 +32,16 @@ mkdocs-help:
 mkdocs-deploy-docs:
     #!/usr/bin/env zsh
     uv run mkdocs gh-deploy --force --message 'docs(mkdocs): update documentation [skip ci]'
+
+# fetch llms.txt files from local docs server
+[group('doc')]
+fetch-llms-txt:
+    #!/usr/bin/env zsh
+    echo "Fetching llms.txt files from local docs server..."
+    echo "Fetching discord llms.txt..."
+    curl -s http://127.0.0.1:8000/oh-my-ai-docs/docs/ai_docs/discord/llms.txt
+    echo "Fetching dpytest llms.txt... done"
+    curl -s http://127.0.0.1:8000/oh-my-ai-docs/docs/ai_docs/dpytest/llms.txt
+    echo "Fetching langgraph llms.txt..."
+    curl -s http://127.0.0.1:8000/oh-my-ai-docs/docs/ai_docs/langgraph/llms.txt
+    echo "Done fetching llms.txt files! 📚"
